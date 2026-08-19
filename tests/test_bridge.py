@@ -261,18 +261,30 @@ assert before == after, "discovery was republished unnecessarily"
 again = json.loads(dict(v.client.published)["aiscatcher/aiscatcher/vessel/219025528"])
 assert again["last_signal_time"] == state["last_signal_time"]
 
+# A missing value must render as "None", the only payload the MQTT integration
+# turns into the unknown state.  The literal "unknown" is rejected on a numeric
+# or timestamp sensor and logs an error on every poll.
+assert not any("unknown" in tmpl for _, _, tmpl, *_ in bridge.VESSEL_SENSORS)
+
 try:
     from jinja2 import Environment
 except ImportError:
     pass
 else:
     env = Environment()
+    sparse = json.loads(published["aiscatcher/aiscatcher/vessel/431000123"])
     for topic, c in vessel_configs:
         if "value_template" not in c:
             continue
         env.from_string(c["value_template"]).render(value_json=state)
-        env.from_string(c["value_template"]).render(
-            value_json=json.loads(published["aiscatcher/aiscatcher/vessel/431000123"]))
+        out = env.from_string(c["value_template"]).render(value_json=sparse)
+        key = topic.rsplit("/", 2)[1]
+        if key in ("heading", "speed", "distance", "bearing", "level", "destination"):
+            assert out == "None", (key, out)   # not "unknown", not ""
+    # a real 0 must survive the fallback
+    assert env.from_string(dict(
+        (k, t) for k, _, t, *_ in bridge.VESSEL_SENSORS)["speed"]
+    ).render(value_json={"speed": 0}) == "0"
     print("all vessel templates rendered, including the sparse ship")
 
 print("VESSELS OK")

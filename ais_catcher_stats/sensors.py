@@ -116,39 +116,41 @@ BINARY_SENSORS = [
 # --- per vessel -----------------------------------------------------------
 # These read the payload published to aiscatcher/<device_id>/vessel/<mmsi>.
 # AIS-catcher omits fields it has not received yet, and the bridge drops nulls,
-# so every optional value falls back through `default('unknown')` - which Home
-# Assistant renders as the unknown state.  `default` without `true` only fires
-# on a missing key, so a legitimate 0 (speed, bearing) survives.
+# so every optional value falls back through `default(None)`, which renders as
+# the string "None" - the only payload the MQTT integration turns into the
+# unknown state.  The literal "unknown" is rejected on a numeric or timestamp
+# sensor and logs an error on every poll instead.  `default` without `true`
+# only fires on a missing key, so a legitimate 0 (speed, bearing) survives.
 VESSEL_SENSORS = [
     ("speed", "Speed",
-     "{{ value_json.speed | default('unknown') }}",
+     "{{ value_json.speed | default(None) }}",
      "kn", "speed", "measurement", None, "mdi:speedometer"),
     ("course", "Course over ground",
-     "{{ value_json.cog | default('unknown') }}",
+     "{{ value_json.cog | default(None) }}",
      "°", None, "measurement", None, "mdi:compass"),
     ("heading", "Heading",
-     "{{ value_json.heading | default('unknown') }}",
+     "{{ value_json.heading | default(None) }}",
      "°", None, "measurement", None, "mdi:compass-outline"),
     ("distance", "Distance",
-     "{{ value_json.distance | default('unknown') }}",
+     "{{ value_json.distance | default(None) }}",
      "nmi", "distance", "measurement", None, None),
     ("bearing", "Bearing",
-     "{{ value_json.bearing | default('unknown') }}",
+     "{{ value_json.bearing | default(None) }}",
      "°", None, "measurement", None, "mdi:compass-rose"),
     ("status", "Navigation status",
-     "{{ value_json.status_text | default('unknown') }}",
+     "{{ value_json.status_text | default(None) }}",
      None, None, None, None, "mdi:ferry"),
     ("destination", "Destination",
-     "{{ value_json.destination | default('unknown') }}",
+     "{{ value_json.destination | default(None) }}",
      None, None, None, None, "mdi:map-marker-path"),
     ("last_signal", "Last signal",
-     "{{ value_json.last_signal_time | default('unknown') }}",
+     "{{ value_json.last_signal_time | default(None) }}",
      None, "timestamp", None, "diagnostic", None),
     ("level", "Signal level",
-     "{{ value_json.level | default('unknown') }}",
+     "{{ value_json.level | default(None) }}",
      "dB", "signal_strength", "measurement", "diagnostic", None),
     ("messages", "Messages received",
-     "{{ value_json.count | default('unknown') }}",
+     "{{ value_json.count | default(None) }}",
      "msg", None, "total_increasing", "diagnostic", "mdi:message-text-outline"),
 ]
 

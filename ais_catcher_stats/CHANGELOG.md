@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2
+
+- Fix: a vessel sensor with no value logged an error on every poll, e.g.
+  `sensor.<ship>_heading ... has the non-numeric value: 'unknown'`. A ship that
+  never sends heading, destination or IMO hit this 120 times an hour. The
+  templates now fall back to `None`, which is the payload the MQTT integration
+  turns into the unknown state; `unknown` is only valid on a text sensor.
+
 ## 0.2.1
 
 - Fix: no vessel ever appeared. `bashio::config 'vessels'` prints the *elements*
