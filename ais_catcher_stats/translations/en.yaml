@@ -35,6 +35,15 @@ configuration:
     description: >-
       Minutes without a message after which a tracked vessel is marked
       unavailable.
+  fleet_sensors:
+    name: Nearby vessel sensors
+    description: >-
+      Sensors for the nearest vessel and the number of vessels close by, for
+      every ship in range rather than the ones listed above.
+  nearby_radius:
+    name: Nearby radius
+    description: >-
+      Nautical miles counted as "nearby" by the vessels nearby sensor.
   log_level:
     name: Log level
     description: Set to debug to log every poll.

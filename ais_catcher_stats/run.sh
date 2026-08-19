@@ -9,6 +9,8 @@ export MESSAGE_TYPE_SENSORS="$(bashio::config 'message_type_sensors')"
 export REMOVE_ON_STOP="$(bashio::config 'remove_entities_on_stop')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
 export VESSEL_TIMEOUT="$(bashio::config 'vessel_timeout' '30')"
+export FLEET_SENSORS="$(bashio::config 'fleet_sensors' 'true')"
+export NEARBY_RADIUS="$(bashio::config 'nearby_radius' '5')"
 
 # A list of objects, which bridge.py parses as JSON.  `bashio::config` cannot
 # return it: for a list option it prints the *elements*, so a single vessel

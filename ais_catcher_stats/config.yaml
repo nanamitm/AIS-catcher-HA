@@ -19,6 +19,8 @@ options:
   log_level: info
   vessels: []
   vessel_timeout: 30
+  fleet_sensors: true
+  nearby_radius: 5
 schema:
   url: url
   scan_interval: int(5,3600)
@@ -31,6 +33,8 @@ schema:
     - mmsi: int(1,999999999)
       name: str?
   vessel_timeout: int(1,1440)
+  fleet_sensors: bool
+  nearby_radius: int(1,500)
   http_username: str?
   http_password: password?
   verify_ssl: bool?

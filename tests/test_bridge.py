@@ -329,6 +329,55 @@ else:
 
 print("VESSELS OK")
 
+# --- everything in range --------------------------------------------------
+
+os.environ["NEARBY_RADIUS"] = "2"
+f = bridge.Bridge(bridge.Config())
+fleet = f.fleet_payload(json.loads(json.dumps(SHIPS)))
+print("fleet:", fleet)
+assert fleet["total"] == 3
+assert fleet["within"] == 1, fleet          # only the ferry at 1.83 nmi
+assert fleet["radius"] == 2
+assert fleet["nearest"]["name"] == "DBB ASTERIX"   # the broadcast name, not the option
+assert fleet["nearest"]["distance"] == 1.83
+assert fleet["nearest"]["shiptype"] == "Passenger"
+
+# a ship without a distance cannot be the nearest one, and no ship at all
+# leaves the sensor unknown rather than reporting a wrong vessel
+assert "nearest" not in f.fleet_payload({"ships": [{"mmsi": 1, "lat": 1}]})
+assert f.fleet_payload({"ships": []})["within"] == 0
+
+f.publish_fleet_discovery(norm)
+fleet_keys = {key for key, *_ in bridge.FLEET_SENSORS}
+fleet_configs = [json.loads(p) for t, p in f.client.published
+                 if t.endswith("/config") and t.rsplit("/", 2)[1] in fleet_keys]
+assert len(fleet_configs) == len(bridge.FLEET_SENSORS)
+for c in fleet_configs:
+    assert c["state_topic"] == "aiscatcher/aiscatcher/fleet"
+    assert c["device"]["identifiers"] == ["aiscatcher_aiscatcher"]   # the receiver
+nearest = [c for c in fleet_configs if c["unique_id"].endswith("nearest_vessel")][0]
+assert nearest["json_attributes_topic"] == "aiscatcher/aiscatcher/fleet"
+
+# ships.json is only fetched when something actually needs it
+os.environ["FLEET_SENSORS"] = "false"
+os.environ["VESSELS"] = "[]"
+assert bridge.Config().needs_ships is False
+os.environ["FLEET_SENSORS"] = "true"
+assert bridge.Config().needs_ships is True
+
+try:
+    from jinja2 import Environment
+except ImportError:
+    pass
+else:
+    env = Environment()
+    for key, _, tmpl, *_ in bridge.FLEET_SENSORS:
+        assert env.from_string(tmpl).render(value_json=fleet) != ""
+        # an empty receiver must render unknown, not an error
+        assert env.from_string(tmpl).render(
+            value_json={"total": 0, "within": 0, "radius": 2}) in ("None", "0")
+print("FLEET OK")
+
 # a vessel that goes out of range keeps the name it was discovered with
 SPARSE = json.loads(json.dumps(SHIPS))
 SPARSE["ships"][1]["shipname"] = "KAIYO MARU"

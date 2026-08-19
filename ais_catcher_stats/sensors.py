@@ -102,6 +102,30 @@ MESSAGE_GROUPS = [
     for key, name, group in MESSAGE_GROUP_SENSORS
 ]
 
+# --- everything in range ---------------------------------------------------
+# These belong to the receiver device but read the fleet topic, which is built
+# from ships.json rather than stat.json.  They answer "is anything close?"
+# without having to know an MMSI in advance.
+FLEET_SENSORS = [
+    ("nearest_vessel", "Nearest vessel",
+     "{{ value_json.nearest.name | default(None) }}",
+     None, None, None, None, "mdi:ferry"),
+    ("nearest_distance", "Nearest vessel distance",
+     "{{ value_json.nearest.distance | default(None) }}",
+     "nmi", "distance", "measurement", None, None),
+    ("vessels_nearby", "Vessels nearby",
+     "{{ value_json.within | default(None) }}",
+     "vessels", None, "measurement", None, "mdi:ferry"),
+]
+
+# Entities that also expose attributes, read from their own state topic.
+# The template has to render a JSON object.
+SENSOR_ATTRIBUTES = {
+    "nearest_vessel": "{{ value_json.nearest | default({}, true) | tojson }}",
+    "vessels_nearby": "{{ {'radius': value_json.radius,"
+                      "    'total': value_json.total} | tojson }}",
+}
+
 # key, name, value_template (must render ON/OFF), device_class, entity_category
 BINARY_SENSORS = [
     ("engine_running", "Engine running",

@@ -30,8 +30,9 @@ except ImportError:  # paho-mqtt 1.x
     def make_client(client_id):
         return MqttClient(client_id=client_id)
 
-from sensors import (BINARY_SENSORS, MESSAGE_GROUPS, NAV_STATUS, SENSORS,
-                     SHIP_TYPES, VESSEL_BINARY_SENSORS, VESSEL_SENSORS)
+from sensors import (BINARY_SENSORS, FLEET_SENSORS, MESSAGE_GROUPS, NAV_STATUS,
+                     SENSOR_ATTRIBUTES, SENSORS, SHIP_TYPES,
+                     VESSEL_BINARY_SENSORS, VESSEL_SENSORS)
 
 LOG = logging.getLogger("ais-bridge")
 
@@ -93,10 +94,20 @@ class Config:
 
         self.vessels = parse_vessels(env("VESSELS", "[]"))
         self.vessel_timeout = int(env("VESSEL_TIMEOUT", "30")) * 60
+        self.fleet_sensors = env_bool("FLEET_SENSORS", True)
+        radius = float(env("NEARBY_RADIUS", "5") or 5)
+        # Keep a whole number whole, so the attribute reads 5 and not 5.0.
+        self.nearby_radius = int(radius) if radius.is_integer() else radius
 
         self.base_topic = "aiscatcher/%s" % self.device_id
         self.state_topic = "%s/state" % self.base_topic
         self.availability_topic = "%s/status" % self.base_topic
+        self.fleet_topic = "%s/fleet" % self.base_topic
+
+    @property
+    def needs_ships(self):
+        """Whether ships.json has to be fetched at all."""
+        return bool(self.vessels) or self.fleet_sensors
 
     def vessel_topic(self, mmsi, suffix=""):
         return "%s/vessel/%d%s" % (self.base_topic, mmsi, suffix)
@@ -428,6 +439,10 @@ class Bridge:
             if component == "binary_sensor":
                 payload["payload_on"] = "ON"
                 payload["payload_off"] = "OFF"
+            attributes = SENSOR_ATTRIBUTES.get(key)
+            if attributes:
+                payload["json_attributes_topic"] = self.cfg.state_topic
+                payload["json_attributes_template"] = attributes
             for field, value in (
                 ("unit_of_measurement", unit),
                 ("device_class", dclass),
@@ -442,6 +457,77 @@ class Bridge:
             count += 1
         LOG.info("Published discovery for %d entities as device '%s'",
                  count, self.cfg.device_name)
+
+    # --- everything in range --------------------------------------------
+
+    def publish_fleet_discovery(self, stat):
+        device = self.device_block(stat)
+        for key, name, tmpl, unit, dclass, sclass, ecat, icon in FLEET_SENSORS:
+            payload = {
+                "name": name,
+                "unique_id": "aiscatcher_%s_%s" % (self.cfg.device_id, key),
+                "object_id": "%s_%s" % (self.cfg.device_id, key),
+                "state_topic": self.cfg.fleet_topic,
+                "value_template": tmpl,
+                "availability_topic": self.cfg.availability_topic,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "expire_after": max(60, self.cfg.interval * 3),
+                "device": device,
+            }
+            for field, value in (("unit_of_measurement", unit),
+                                 ("device_class", dclass),
+                                 ("state_class", sclass),
+                                 ("entity_category", ecat),
+                                 ("icon", icon)):
+                if value:
+                    payload[field] = value
+            attributes = SENSOR_ATTRIBUTES.get(key)
+            if attributes:
+                payload["json_attributes_topic"] = self.cfg.fleet_topic
+                payload["json_attributes_template"] = attributes
+            self.client.publish(self.discovery_topic("sensor", key),
+                                json.dumps(payload), qos=1, retain=True)
+        LOG.info("Published discovery for %d fleet entities", len(FLEET_SENSORS))
+
+    def fleet_payload(self, ships):
+        """Summarise ships.json: what is closest, and how much is nearby."""
+        rows = []
+        entries = ships.get("ships", []) or []
+        for ship in entries:
+            distance = ship.get("distance")
+            if isinstance(distance, (int, float)):
+                rows.append((distance, ship))
+
+        payload = {
+            "radius": self.cfg.nearby_radius,
+            "total": len(entries),
+            "within": sum(1 for distance, _ in rows
+                          if distance <= self.cfg.nearby_radius),
+        }
+        if rows:
+            distance, ship = min(rows, key=lambda row: row[0])
+            nearest = {"distance": distance}
+            try:
+                nearest["mmsi"] = int(ship["mmsi"])
+                nearest["name"] = str(ship.get("shipname") or "").strip() \
+                    or "MMSI %d" % nearest["mmsi"]
+            except (KeyError, TypeError, ValueError):
+                return payload
+            for key in ("bearing", "speed", "country", "last_signal"):
+                value = ship.get(key)
+                if value is not None:
+                    nearest[key] = value
+            type_text = ship_type(ship.get("shiptype"))
+            if type_text:
+                nearest["shiptype"] = type_text
+            payload["nearest"] = nearest
+        return payload
+
+    def publish_fleet(self, ships):
+        self.client.publish(self.cfg.fleet_topic,
+                            json.dumps(self.fleet_payload(ships)),
+                            qos=0, retain=True)
 
     # --- vessels --------------------------------------------------------
 
@@ -633,7 +719,10 @@ class Bridge:
     def remove_discovery(self):
         for component, key in [(c, k) for c, k, *_ in self.entities()]:
             self.client.publish(self.discovery_topic(component, key), "", qos=1, retain=True)
+        for key, *_ in FLEET_SENSORS:
+            self.client.publish(self.discovery_topic("sensor", key), "", qos=1, retain=True)
         self.client.publish(self.cfg.state_topic, "", qos=1, retain=True)
+        self.client.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
 
         for mmsi in self.vessel_names:
             prefix = "%s/%%s/aiscatcher_vessel_%d/%%s/config" % (
@@ -673,6 +762,8 @@ class Bridge:
                 stat = self.normalise(self.fetch())
                 if not self.discovered:
                     self.publish_discovery(stat)
+                    if self.cfg.fleet_sensors:
+                        self.publish_fleet_discovery(stat)
                     self.discovered = True
                 self.client.publish(self.cfg.availability_topic, "online", qos=1, retain=True)
                 self.client.publish(self.cfg.state_topic, json.dumps(stat), qos=0, retain=True)
@@ -682,10 +773,14 @@ class Bridge:
                 LOG.debug("Published %s vessels, %.2f msg/s",
                           stat.get("vessel_count", 0), stat.get("msg_rate", 0.0))
 
-                if self.cfg.vessels:
+                if self.cfg.needs_ships:
                     # A tracker hiccup must not take the statistics down with it
                     try:
-                        self.publish_vessels(self.fetch_ships())
+                        ships = self.fetch_ships()
+                        if self.cfg.vessels:
+                            self.publish_vessels(ships)
+                        if self.cfg.fleet_sensors:
+                            self.publish_fleet(ships)
                     except Exception as err:
                         LOG.warning("Cannot read the vessel list: %s", err)
             except Exception as err:  # keep the bridge alive on any hiccup
