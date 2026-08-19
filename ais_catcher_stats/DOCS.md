@@ -207,6 +207,16 @@ enabled. From an SSH add-on: `curl http://<host>:8100/api/stat.json`.
 the MMSI is right and that the ship appears in the AIS-catcher map, and remember
 that `vessel_timeout` (30 minutes by default) marks a silent ship unavailable.
 
+**No AIS-catcher entry in the sidebar** — an add-on that gained ingress through
+an *update* keeps the Supervisor's stored "Show in sidebar" setting, which was
+off before it had a panel. Turn it on under **Settings → Add-ons → AIS-catcher
+Statistics → Show in sidebar**. A fresh install has it on already.
+
+**The sidebar panel is empty** — check the add-on log. `Could not start the web
+UI proxy` means nginx did not come up; anything else means the receiver's web
+server did not answer, and `curl <url>` from an SSH add-on will say why. The
+statistics are unaffected either way.
+
 **Entities did not appear** — the discovery messages are sent once at startup;
 restart the add-on after changing `device_name` or `device_id`. Renaming
 `device_id` creates a *new* device, the old one has to be deleted manually.
