@@ -8,7 +8,6 @@ arch:
   - amd64
 init: false
 ingress: true
-ingress_port: 8099
 ingress_stream: true
 panel_icon: mdi:radar
 panel_title: AIS-catcher
