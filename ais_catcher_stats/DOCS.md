@@ -29,6 +29,27 @@ no YAML, and the entities actually end up on one device.
 3. Set `url` to your AIS-catcher web server and start the add-on.
 4. The device appears under **Settings → Devices & services → MQTT**.
 
+## The map in the sidebar
+
+The add-on proxies the AIS-catcher web UI through Home Assistant ingress, so
+the map appears in the sidebar as **AIS-catcher** — no configuration, it uses
+the same `url` as the statistics.
+
+Because the page is served through Home Assistant rather than fetched by the
+browser:
+
+- it is behind your Home Assistant login,
+- it works from outside the house, over HTTPS, without exposing AIS-catcher
+  to the internet or hitting mixed-content errors,
+- the browser never has to reach the receiver itself, so the map also works on
+  a phone that is not on the same network.
+
+`http_username` / `http_password` are passed through, and an `https://`
+receiver keeps its certificate verified unless `verify_ssl` is `false`.
+
+If the proxy cannot start, the add-on logs a warning and carries on publishing
+statistics; only the panel is affected.
+
 ## Options
 
 | Option | Default | Description |

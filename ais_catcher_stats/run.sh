@@ -1,7 +1,9 @@
 #!/usr/bin/with-contenv bashio
 set -e
 
-export AIS_URL="$(bashio::config 'url')"
+AIS_URL="$(bashio::config 'url')"
+AIS_URL="${AIS_URL%/}"
+export AIS_URL
 export SCAN_INTERVAL="$(bashio::config 'scan_interval')"
 export DEVICE_NAME="$(bashio::config 'device_name')"
 export DEVICE_ID="$(bashio::config 'device_id')"
@@ -43,6 +45,40 @@ else
     export MQTT_PORT="$(bashio::services mqtt 'port')"
     export MQTT_USER="$(bashio::services mqtt 'username')"
     export MQTT_PASS="$(bashio::services mqtt 'password')"
+fi
+
+# The ingress panel: nginx proxies the AIS-catcher web UI so it shows up in the
+# Home Assistant sidebar.  Only the upstream and its credentials vary, so they
+# go in a snippet that /etc/nginx/nginx.conf includes.
+{
+    echo "proxy_pass ${AIS_URL}/;"
+    case "${AIS_URL}" in
+        https://*)
+            echo "proxy_ssl_server_name on;"
+            # nginx does not verify an upstream certificate unless told to, which
+            # is what a self-signed receiver needs.
+            if ! bashio::config.has_value 'verify_ssl' || bashio::config.true 'verify_ssl'; then
+                echo "proxy_ssl_verify on;"
+                echo "proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;"
+            fi
+            ;;
+    esac
+    if bashio::config.has_value 'http_username'; then
+        # busybox base64 has no -w, so the newline is stripped separately
+        CREDENTIALS="$(printf '%s:%s' "${HTTP_USERNAME}" "${HTTP_PASSWORD}" | base64 | tr -d '\n')"
+        echo "proxy_set_header Authorization \"Basic ${CREDENTIALS}\";"
+    fi
+} > /etc/nginx/upstream.conf
+
+# nginx workers drop to an unprivileged user, so its scratch space has to be
+# writable by them.
+mkdir -p /tmp/nginx_client_body /tmp/nginx_proxy
+chmod 777 /tmp/nginx_client_body /tmp/nginx_proxy
+if nginx -t > /dev/null 2>&1 && nginx; then
+    bashio::log.info "Web UI proxied to the sidebar panel."
+else
+    # A broken panel must not take the statistics down with it.
+    bashio::log.warning "Could not start the web UI proxy; the sidebar panel will be empty."
 fi
 
 bashio::log.info "Polling ${AIS_URL} every ${SCAN_INTERVAL}s -> MQTT ${MQTT_HOST}:${MQTT_PORT}"

@@ -53,6 +53,10 @@ Optionally it also tracks individual ships: list the MMSIs you care about and
 each becomes its own device with a map tracker, an in-range flag, speed,
 course, distance, navigation status, destination, ETA and hull dimensions.
 
+The AIS-catcher map itself lands in the Home Assistant sidebar through ingress,
+behind your Home Assistant login — so it also works from outside the house
+without exposing the receiver.
+
 It is a bridge only — it does not run AIS-catcher itself, so it works both with
 a receiver on the same machine and with one running elsewhere on the network.
 

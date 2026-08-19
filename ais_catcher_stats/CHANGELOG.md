@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0
+
+- The AIS-catcher map is now in the Home Assistant sidebar, through ingress.
+  The add-on proxies the receiver's web UI, so it is reached with your Home
+  Assistant login, over HTTPS when Home Assistant is, and without the browser
+  needing to reach the receiver at all — which also makes it work from
+  outside the house without exposing AIS-catcher.
+- `http_username` / `http_password` are passed on to the proxied UI, and an
+  `https://` receiver keeps its certificate checked unless `verify_ssl` is off.
+- A proxy that fails to start is logged and skipped; the statistics keep
+  running.
+
 ## 0.3.0
 
 - Each tracked vessel gets an `In range` binary sensor. It reads `on`/`off`

@@ -1,5 +1,5 @@
 name: AIS-catcher Statistics
-version: "0.3.0"
+version: "0.4.0"
 slug: ais_catcher_stats
 description: AIS-catcher statistics and vessel trackers in Home Assistant, via MQTT discovery
 url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher_stats
@@ -7,6 +7,11 @@ arch:
   - aarch64
   - amd64
 init: false
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+panel_icon: mdi:radar
+panel_title: AIS-catcher
 services:
   - mqtt:need
 options:
