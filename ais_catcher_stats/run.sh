@@ -10,8 +10,11 @@ export REMOVE_ON_STOP="$(bashio::config 'remove_entities_on_stop')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
 export VESSEL_TIMEOUT="$(bashio::config 'vessel_timeout' '30')"
 
-# A list of objects: bashio returns it as JSON, which bridge.py parses.
-VESSELS="$(bashio::config 'vessels' '[]' | jq -c '.' 2>/dev/null)"
+# A list of objects, which bridge.py parses as JSON.  `bashio::config` cannot
+# return it: for a list option it prints the *elements*, so a single vessel
+# arrives as a bare object and jq counts its keys instead of the entries.
+# The raw options file keeps the array intact.
+VESSELS="$(jq -c '.vessels // []' /data/options.json 2>/dev/null)"
 if [ -z "${VESSELS}" ]; then
     VESSELS="[]"
 fi

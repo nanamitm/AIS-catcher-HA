@@ -163,9 +163,15 @@ NAV_STATUS = {
     6: "Aground",
     7: "Engaged in fishing",
     8: "Under way sailing",
+    9: "Reserved (high speed craft)",
+    10: "Reserved (wing in ground)",
     11: "Towing astern",
     12: "Pushing ahead",
+    13: "Reserved",
     14: "AIS-SART active",
+    # The default a transponder sends when nothing was set, so it is by far the
+    # most common value on small craft.
+    15: "Undefined",
 }
 
 # Ship type ranges, field "shiptype".

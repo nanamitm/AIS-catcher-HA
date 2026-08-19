@@ -102,13 +102,40 @@ class Config:
         return "%s/vessel/%d%s" % (self.base_topic, mmsi, suffix)
 
 
+def load_json_entries(raw):
+    """Decode the `vessels` option, whichever shape the shell handed over.
+
+    Normally an array.  `bashio::config` prints the elements of a list option
+    rather than the list itself, so older run.sh versions -- and anyone
+    exporting VESSELS by hand -- can deliver one bare object or several objects
+    in a row.  All three forms mean the same thing here.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except ValueError:
+        pass
+
+    decoder, entries, index = json.JSONDecoder(), [], 0
+    while index < len(raw):
+        value, index = decoder.raw_decode(raw, index)   # raises on real garbage
+        entries.append(value)
+        while index < len(raw) and raw[index] in " \t\r\n,":
+            index += 1
+    return entries
+
+
 def parse_vessels(raw):
     """Read the `vessels` add-on option: [{"mmsi": 219025528, "name": "..."}]."""
     try:
-        entries = json.loads(raw or "[]")
+        entries = load_json_entries(raw)
     except ValueError as err:
         LOG.error("Cannot read the vessels option (%s), continuing without it", err)
         return []
+    if isinstance(entries, dict):
+        entries = [entries]
     if not isinstance(entries, list):
         LOG.error("The vessels option is not a list, continuing without it")
         return []

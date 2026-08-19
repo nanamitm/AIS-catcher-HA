@@ -189,6 +189,18 @@ cfg = bridge.Config()
 assert [v["mmsi"] for v in cfg.vessels] == [219025528, 431000123, 999000111, 111222333]
 assert cfg.vessel_timeout == 1800
 
+# `bashio::config` prints the elements of a list option rather than the list,
+# so one configured vessel used to reach the bridge as a bare object and every
+# tracker silently disappeared.  All three shapes must parse.
+one = '{"mmsi": 431600190, "name": "DAI18DAIKYOU-MARU"}'
+assert bridge.parse_vessels(one) == [{"mmsi": 431600190, "name": "DAI18DAIKYOU-MARU"}]
+assert [v["mmsi"] for v in bridge.parse_vessels(one + '\n{"mmsi": 219025528}')] == \
+    [431600190, 219025528]
+assert bridge.parse_vessels('[%s]' % one)[0]["mmsi"] == 431600190
+assert bridge.parse_vessels("") == [] and bridge.parse_vessels(None) == []
+assert bridge.parse_vessels("not json") == []
+print("VESSELS OPTION PARSING OK")
+
 v = bridge.Bridge(cfg)
 v.publish_vessels(json.loads(json.dumps(SHIPS)))
 

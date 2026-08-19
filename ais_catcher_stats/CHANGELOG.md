@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1
+
+- Fix: no vessel ever appeared. `bashio::config 'vessels'` prints the *elements*
+  of a list option, not the list, so the add-on received a bare object and
+  logged `The vessels option is not a list, continuing without it`. The option
+  is now read straight from `/data/options.json`, and the bridge also accepts
+  the flattened form.
+- Navigation status 15 ("Undefined") and the reserved codes 9, 10 and 13 are
+  named instead of leaving the status sensor unknown. 15 is what a transponder
+  sends when the crew set nothing, which is most small craft.
+
 ## 0.2.0
 
 - Vessel trackers. List MMSIs under the `vessels` option and each ship becomes
