@@ -392,11 +392,21 @@ except ImportError:
     pass
 else:
     env = Environment()
+    empty = {"total": 0, "within": 0, "radius": 2}      # nothing in range at all
     for key, _, tmpl, *_ in bridge.FLEET_SENSORS:
         assert env.from_string(tmpl).render(value_json=fleet) != ""
-        # an empty receiver must render unknown, not an error
-        assert env.from_string(tmpl).render(
-            value_json={"total": 0, "within": 0, "radius": 2}) in ("None", "0")
+        # stepping into a missing object raises rather than falling back, which
+        # in Home Assistant means an error on every poll and a stuck state
+        assert env.from_string(tmpl).render(value_json=empty) in ("None", "0")
+
+    # every attributes template has to survive a payload that carries none of
+    # the fields it names, and still render a JSON object
+    from sensors import SENSOR_ATTRIBUTES                # noqa: E402
+    for key, tmpl in SENSOR_ATTRIBUTES.items():
+        for payload in (norm, fleet, empty, {}):
+            out = env.from_string(tmpl).render(value_json=payload)
+            assert isinstance(json.loads(out), dict), (key, out)
+    print("all attribute templates rendered")
 print("FLEET OK")
 
 # --- the receiver on the map ----------------------------------------------

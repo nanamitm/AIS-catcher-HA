@@ -109,12 +109,15 @@ MESSAGE_GROUPS = [
 # These belong to the receiver device but read the fleet topic, which is built
 # from ships.json rather than stat.json.  They answer "is anything close?"
 # without having to know an MMSI in advance.
+# An empty receiver publishes no `nearest` at all, and reading an attribute of
+# something undefined raises instead of falling back -- hence the `default({})`
+# before every step into the object.
 FLEET_SENSORS = [
     ("nearest_vessel", "Nearest vessel",
-     "{{ value_json.nearest.name | default(None) }}",
+     "{{ (value_json.nearest | default({}, true)).name | default(None) }}",
      None, None, None, None, "mdi:ferry"),
     ("nearest_distance", "Nearest vessel distance",
-     "{{ value_json.nearest.distance | default(None) }}",
+     "{{ (value_json.nearest | default({}, true)).distance | default(None) }}",
      "nmi", "distance", "measurement", None, None),
     ("vessels_nearby", "Vessels nearby",
      "{{ value_json.within | default(None) }}",
@@ -126,8 +129,8 @@ FLEET_SENSORS = [
 # an undefined one cannot be serialised.
 SENSOR_ATTRIBUTES = {
     "nearest_vessel": "{{ value_json.nearest | default({}, true) | tojson }}",
-    "vessels_nearby": "{{ {'radius': value_json.radius,"
-                      "    'total': value_json.total} | tojson }}",
+    "vessels_nearby": "{{ {'radius': value_json.radius | default(0),"
+                      "    'total': value_json.total | default(0)} | tojson }}",
     # The per-sector reach, for a polar plot of what the antenna hears.
     "coverage": "{{ value_json.coverage | default({}, true) | tojson }}",
     # Links belong with the sharing flag rather than on a sensor of their own.
