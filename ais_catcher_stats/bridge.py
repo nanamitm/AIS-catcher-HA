@@ -31,7 +31,7 @@ except ImportError:  # paho-mqtt 1.x
         return MqttClient(client_id=client_id)
 
 from sensors import (BINARY_SENSORS, MESSAGE_GROUPS, NAV_STATUS, SENSORS,
-                     SHIP_TYPES, VESSEL_SENSORS)
+                     SHIP_TYPES, VESSEL_BINARY_SENSORS, VESSEL_SENSORS)
 
 LOG = logging.getLogger("ais-bridge")
 
@@ -483,6 +483,27 @@ class Bridge:
         self.client.publish(prefix % ("device_tracker", "location"),
                             json.dumps(tracker), qos=1, retain=True)
 
+        for key, ename, dclass, icon in VESSEL_BINARY_SENSORS:
+            config = {
+                "name": ename,
+                "unique_id": "aiscatcher_vessel_%d_%s" % (mmsi, key),
+                "object_id": "%s_%d_%s" % (self.cfg.device_id, mmsi, key),
+                "state_topic": availability,
+                "payload_on": "online",
+                "payload_off": "offline",
+                # The bridge's availability, not the vessel's: a ship out of
+                # range has to read "off", not "unavailable".
+                "availability_topic": self.cfg.availability_topic,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "device": device,
+            }
+            for field, value in (("device_class", dclass), ("icon", icon)):
+                if value:
+                    config[field] = value
+            self.client.publish(prefix % ("binary_sensor", key), json.dumps(config),
+                                qos=1, retain=True)
+
         for key, ename, tmpl, unit, dclass, sclass, ecat, icon in VESSEL_SENSORS:
             config = {
                 "name": ename,
@@ -567,6 +588,8 @@ class Bridge:
                                 qos=1, retain=True)
             for key, *_ in VESSEL_SENSORS:
                 self.client.publish(prefix % ("sensor", key), "", qos=1, retain=True)
+            for key, *_ in VESSEL_BINARY_SENSORS:
+                self.client.publish(prefix % ("binary_sensor", key), "", qos=1, retain=True)
             for suffix in ("", "/position", "/status"):
                 self.client.publish(self.cfg.vessel_topic(mmsi, suffix), "",
                                     qos=1, retain=True)

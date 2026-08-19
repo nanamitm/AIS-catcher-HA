@@ -208,7 +208,18 @@ published = dict(v.client.published)
 vessel_configs = [(t, json.loads(p)) for t, p in v.client.published
                   if t.endswith("/config") and "aiscatcher_vessel_" in t]
 print("vessel entities:", len(vessel_configs))
-assert len(vessel_configs) == 4 * (len(bridge.VESSEL_SENSORS) + 1)
+assert len(vessel_configs) == 4 * (
+    len(bridge.VESSEL_SENSORS) + len(bridge.VESSEL_BINARY_SENSORS) + 1)
+
+# The in-range flag must survive a ship leaving: it reads the vessel status
+# topic as its state and the *bridge* availability, so it reports off instead
+# of going unavailable with the rest of the vessel's entities.
+in_range = [c for t, c in vessel_configs if t.endswith("/in_range/config")]
+assert len(in_range) == 4
+for c in in_range:
+    assert c["state_topic"].endswith("/status"), c["state_topic"]
+    assert (c["payload_on"], c["payload_off"]) == ("online", "offline")
+    assert c["availability_topic"] == "aiscatcher/aiscatcher/status", c["availability_topic"]
 
 # one tracker per vessel, all linked to the receiver device
 trackers = [c for t, c in vessel_configs if "/device_tracker/" in t]

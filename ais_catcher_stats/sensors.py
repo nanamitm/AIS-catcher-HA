@@ -154,6 +154,18 @@ VESSEL_SENSORS = [
      "msg", None, "total_increasing", "diagnostic", "mdi:message-text-outline"),
 ]
 
+# key, name, device_class, entity_category
+#
+# These read the vessel availability topic (online/offline) as their state, not
+# the JSON payload, because that topic is written on every poll while the state
+# topic is only written for a ship that is actually in range.  They also hang
+# off the bridge's own availability instead of the vessel's, so an absent ship
+# reads "off" rather than "unavailable" -- an automation can trigger on a plain
+# state change instead of watching for unavailable.
+VESSEL_BINARY_SENSORS = [
+    ("in_range", "In range", None, "mdi:radar"),
+]
+
 # AIS navigation status (message types 1/2/3), field "status".
 NAV_STATUS = {
     0: "Under way using engine",
