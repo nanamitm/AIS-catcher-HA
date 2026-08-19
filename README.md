@@ -40,14 +40,18 @@ If the button does not work, add the repository by hand:
 <img src="ais_catcher_stats/logo.png" width="320" alt="AIS-catcher Statistics">
 
 Polls the `stat.json` endpoint of an existing AIS-catcher web server and
-publishes the statistics to Home Assistant over MQTT discovery — around 35
+publishes the statistics to Home Assistant over MQTT discovery — around 40
 entities, all grouped under **one device**: message rate, vessel counts, range,
-signal levels, PPM, per-channel and per-message-type breakdowns, plus
-diagnostics such as memory use, received bytes, uptime and version.
+signal levels, PPM, per-channel and per-message-type breakdowns, reception
+coverage per compass sector, plus diagnostics such as memory use, received
+bytes, uptime and version. The receiver itself lands on the map.
+
+It answers "is anything close?" out of the box, with sensors for the nearest
+vessel and the number of ships within a radius you choose.
 
 Optionally it also tracks individual ships: list the MMSIs you care about and
-each becomes its own device with a map tracker, speed, course, distance,
-navigation status and destination.
+each becomes its own device with a map tracker, an in-range flag, speed,
+course, distance, navigation status, destination, ETA and hull dimensions.
 
 It is a bridge only — it does not run AIS-catcher itself, so it works both with
 a receiver on the same machine and with one running elsewhere on the network.

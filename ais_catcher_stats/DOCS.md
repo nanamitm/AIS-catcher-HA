@@ -40,6 +40,8 @@ no YAML, and the entities actually end up on one device.
 | `message_type_sensors` | `true` | Adds the nine per message-group sensors. |
 | `vessels` | empty | Vessels to track as their own device, see below. |
 | `vessel_timeout` | `30` | Minutes without a message after which a tracked vessel goes unavailable. |
+| `fleet_sensors` | `true` | Sensors for the nearest vessel and how many are close by, for every ship in range rather than the listed ones. |
+| `nearby_radius` | `5` | Nautical miles counted as "nearby" (1–500). |
 | `remove_entities_on_stop` | `false` | Clears the discovery topics when the add-on stops, so the device disappears from Home Assistant instead of going unavailable. |
 | `log_level` | `info` | `debug` logs every poll. |
 
@@ -65,8 +67,25 @@ msg/min.
 base station, static data, binary, SAR aircraft, safety related,
 Aid-to-Navigation, long range, other, all in msg/min over the last minute.
 
+**Nearby** (when `fleet_sensors` is on) — nearest vessel (its MMSI, distance,
+bearing, speed, country and type are attributes), nearest vessel distance, and
+the number of vessels within `nearby_radius`. These cover every ship in range,
+so an automation can react to a ship approaching without knowing its MMSI.
+
 **Diagnostics** — web connections, memory use, received total, uptime, station,
-version, build, build date, receiver device, engine running, community sharing.
+version, build, build date, receiver device, coverage sectors, engine running,
+community sharing.
+
+The receiver also gets an **Antenna location** `device_tracker`, so it appears
+on the map next to the ships it hears — that position is what every distance
+and bearing is measured from. It is published once AIS-catcher reports a real
+position.
+
+Two entities carry extra attributes: `Coverage sectors` holds the per-sector
+reception reach (`reach`, `channel_a`, `channel_b` — AIS-catcher's radar
+arrays, one entry per compass sector) for drawing a polar plot, and
+`Community sharing` holds the `link` to your aiscatcher.org page and the
+`station_link` to MarineTraffic.
 
 Long-term statistics work out of the box: counters carry `state_class`, the
 byte counters use `device_class: data_size`, distances `device_class: distance`,
@@ -85,10 +104,35 @@ vessels:
 ```
 
 Per vessel you get a `device_tracker` (source type GPS, so it shows on the map
-and triggers zone automations) plus sensors for speed, course over ground,
-heading, distance, bearing, navigation status, destination, and — as
-diagnostics — last signal, signal level and message count. Values the ship has
-not broadcast yet stay `unknown` rather than showing a wrong 0.
+and triggers zone automations), an `In range` binary sensor, and sensors for
+speed, course over ground, heading, distance, bearing, navigation status,
+destination, estimated arrival and country — plus, as diagnostics, last signal,
+signal level, message count, call sign, length, beam and draught. Values the
+ship has not broadcast yet stay `unknown` rather than showing a wrong 0.
+
+Everything from `Estimated arrival` down comes from the AIS static report
+(message 5/24), which a ship sends every few minutes — expect those to fill in
+a little after the first position. The ETA carries no year, so the add-on picks
+the year that puts it closest to now.
+
+Use **`In range`** for automations rather than the availability of the other
+entities: it reads `on`/`off` and stays that way, while the rest go
+`unavailable`, which also happens on a Home Assistant restart.
+
+```yaml
+automation:
+  - triggers:
+      - trigger: state
+        entity_id: binary_sensor.dbb_asterix_in_range
+        from: "off"
+        to: "on"
+    actions:
+      - action: notify.mobile_app
+        data:
+          message: >-
+            {{ state_attr('sensor.dbb_asterix_distance', 'friendly_name') }} is
+            back, {{ states('sensor.dbb_asterix_distance') }} away.
+```
 
 This replaces the hand-written per-ship MQTT YAML from
 [issue #376](https://github.com/jvde-github/AIS-catcher/issues/376): no
@@ -120,9 +164,14 @@ Notes:
   publishes `offline` on the availability topic and every entity carries
   `expire_after`), rather than keeping stale values.
 - MQTT topics: state on `aiscatcher/<device_id>/state`, availability on
-  `aiscatcher/<device_id>/status`. The state topic carries the whole normalised
-  `stat.json`, so you can build extra template sensors from fields that have no
-  entity of their own, e.g. `value_json.msg_types['21']`.
+  `aiscatcher/<device_id>/status`, the nearby summary on
+  `aiscatcher/<device_id>/fleet`, the antenna position on
+  `aiscatcher/<device_id>/position`, and one vessel each on
+  `aiscatcher/<device_id>/vessel/<mmsi>`. The state topic carries the whole
+  normalised `stat.json`, so you can build extra template sensors from fields
+  that have no entity of their own, e.g. `value_json.msg_types['21']`.
+- `ships.json` is only requested when something needs it — a tracked vessel or
+  `fleet_sensors`. With both off, the add-on polls `stat.json` alone.
 
 ## Troubleshooting
 

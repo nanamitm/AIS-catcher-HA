@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+- Each tracked vessel gets an `In range` binary sensor. It reads `on`/`off`
+  instead of going `unavailable` with the rest of the ship's entities, so an
+  automation for "the ferry is back" no longer fires on a restart as well.
+- Six sensors more per vessel, from the static report `ships.json` already
+  carried: estimated arrival, country, call sign, length, beam and draught.
+  The hull size is the sum of the antenna offsets the ship reports, and the
+  ETA — which AIS sends without a year — resolves to the year closest to now.
+- New `Nearest vessel`, `Nearest vessel distance` and `Vessels nearby` sensors
+  covering everything in range, so "a ship is approaching" does not need an
+  MMSI up front. Radius set by `nearby_radius` (5 nmi), switched off with
+  `fleet_sensors`.
+- The receiver appears on the map as an `Antenna location` tracker, at the
+  position its distances and bearings are measured from.
+- New `Coverage sectors` diagnostic sensor: how many compass sectors heard
+  anything last minute, with AIS-catcher's radar arrays as attributes for a
+  polar plot. The aiscatcher.org and MarineTraffic links are attributes on
+  `Community sharing`.
+- `ships.json` is only fetched when a tracked vessel or `fleet_sensors` needs
+  it.
+
 ## 0.2.2
 
 - Fix: a vessel sensor with no value logged an error on every poll, e.g.
