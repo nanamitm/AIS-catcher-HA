@@ -2,16 +2,11 @@ name: AIS-catcher Statistics
 version: "0.1.1"
 slug: ais_catcher_stats
 description: Publishes AIS-catcher stat.json to Home Assistant as one device via MQTT discovery
-url: https://github.com/jvde-github/AIS-catcher/issues/376
+url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher_stats
 arch:
   - aarch64
   - amd64
-  - armv7
-  - armhf
-  - i386
 init: false
-startup: application
-boot: auto
 services:
   - mqtt:need
 options:

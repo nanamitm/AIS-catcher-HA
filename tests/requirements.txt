@@ -1,2 +1,4 @@
+# The bridge imports requests at module level.
+requests>=2.31
 # Only needed to render the discovery templates during the test run.
 jinja2>=3.1

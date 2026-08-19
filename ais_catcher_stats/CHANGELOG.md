@@ -11,6 +11,8 @@
   sensor showing `['AIS 00000060']`.
 - The receiver model is exposed as `hw_version` on the device.
 - Added `icon.png` and `logo.png`.
+- Dropped the `armv7`, `armhf` and `i386` architectures, deprecated since
+  Home Assistant 2025.12.
 
 ## 0.1.0
 
