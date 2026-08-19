@@ -103,6 +103,7 @@ class Config:
         self.state_topic = "%s/state" % self.base_topic
         self.availability_topic = "%s/status" % self.base_topic
         self.fleet_topic = "%s/fleet" % self.base_topic
+        self.station_topic = "%s/position" % self.base_topic
 
     @property
     def needs_ships(self):
@@ -271,6 +272,8 @@ class Bridge:
         self.ship_path = None
         self.anchors = {}
         self.discovered = False
+        self.device = None        # the device block, reused by later discoveries
+        self.station_published = False
         self.vessel_names = {}   # mmsi -> the name the discovery was published with
         self.ship_names = {}     # mmsi -> last shipname heard over the air
         self.vessel_seen = set()  # mmsi currently published as online
@@ -421,7 +424,7 @@ class Bridge:
             self.cfg.discovery_prefix, component, self.cfg.device_id, key)
 
     def publish_discovery(self, stat):
-        device = self.device_block(stat)
+        device = self.device = self.device_block(stat)
         count = 0
         for component, key, name, tmpl, unit, dclass, sclass, ecat, icon in self.entities():
             payload = {
@@ -527,6 +530,46 @@ class Bridge:
     def publish_fleet(self, ships):
         self.client.publish(self.cfg.fleet_topic,
                             json.dumps(self.fleet_payload(ships)),
+                            qos=0, retain=True)
+
+    def publish_station(self, ships):
+        """Put the receiver itself on the map.
+
+        ships.json reports the antenna position, which is what every distance
+        and bearing in the payload is measured from.  A receiver that has no
+        position configured reports 0/0 -- a real coordinate in the Atlantic,
+        so it has to be skipped rather than published.
+        """
+        station = as_dict(ships.get("station"))
+        lat, lon = station.get("lat"), station.get("lon")
+        if not all(isinstance(value, (int, float)) for value in (lat, lon)):
+            return
+        if lat == 0 and lon == 0:
+            return
+
+        if not self.station_published:
+            tracker = {
+                "name": "Antenna location",
+                "unique_id": "aiscatcher_%s_station_location" % self.cfg.device_id,
+                "object_id": "%s_station_location" % self.cfg.device_id,
+                "json_attributes_topic": self.cfg.station_topic,
+                "availability_topic": self.cfg.availability_topic,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "source_type": "gps",
+                "device": self.device or {
+                    "identifiers": ["aiscatcher_%s" % self.cfg.device_id]},
+            }
+            self.client.publish(
+                "%s/device_tracker/aiscatcher_%s/station_location/config" % (
+                    self.cfg.discovery_prefix, self.cfg.device_id),
+                json.dumps(tracker), qos=1, retain=True)
+            self.station_published = True
+            LOG.info("Published the receiver position %.4f, %.4f", lat, lon)
+
+        self.client.publish(self.cfg.station_topic,
+                            json.dumps({"latitude": lat, "longitude": lon,
+                                        "gps_accuracy": 0}),
                             qos=0, retain=True)
 
     # --- vessels --------------------------------------------------------
@@ -721,8 +764,12 @@ class Bridge:
             self.client.publish(self.discovery_topic(component, key), "", qos=1, retain=True)
         for key, *_ in FLEET_SENSORS:
             self.client.publish(self.discovery_topic("sensor", key), "", qos=1, retain=True)
+        self.client.publish(
+            "%s/device_tracker/aiscatcher_%s/station_location/config" % (
+                self.cfg.discovery_prefix, self.cfg.device_id), "", qos=1, retain=True)
         self.client.publish(self.cfg.state_topic, "", qos=1, retain=True)
         self.client.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
+        self.client.publish(self.cfg.station_topic, "", qos=1, retain=True)
 
         for mmsi in self.vessel_names:
             prefix = "%s/%%s/aiscatcher_vessel_%d/%%s/config" % (
@@ -777,6 +824,7 @@ class Bridge:
                     # A tracker hiccup must not take the statistics down with it
                     try:
                         ships = self.fetch_ships()
+                        self.publish_station(ships)
                         if self.cfg.vessels:
                             self.publish_vessels(ships)
                         if self.cfg.fleet_sensors:

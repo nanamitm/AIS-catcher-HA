@@ -378,6 +378,33 @@ else:
             value_json={"total": 0, "within": 0, "radius": 2}) in ("None", "0")
 print("FLEET OK")
 
+# --- the receiver on the map ----------------------------------------------
+
+s = bridge.Bridge(bridge.Config())
+s.device = {"identifiers": ["aiscatcher_aiscatcher"], "name": "AIS-catcher"}
+s.publish_station(json.loads(json.dumps(SHIPS)))
+station = dict(s.client.published)
+assert json.loads(station["aiscatcher/aiscatcher/position"]) == {
+    "latitude": 35.44, "longitude": 139.64, "gps_accuracy": 0}
+tracker = json.loads(station[
+    "homeassistant/device_tracker/aiscatcher_aiscatcher/station_location/config"])
+assert tracker["source_type"] == "gps"
+assert tracker["device"]["identifiers"] == ["aiscatcher_aiscatcher"]
+
+# the discovery is written once, not on every poll
+before = len(s.client.published)
+s.publish_station(json.loads(json.dumps(SHIPS)))
+assert len(s.client.published) == before + 1
+
+# 0/0 is a real coordinate off Africa, so a receiver without a position must
+# not end up there
+blank = bridge.Bridge(bridge.Config())
+blank.publish_station({"station": {"lat": 0, "lon": 0}})
+blank.publish_station({"station": {}})
+blank.publish_station({})
+assert blank.client.published == [], blank.client.published
+print("STATION OK")
+
 # a vessel that goes out of range keeps the name it was discovered with
 SPARSE = json.loads(json.dumps(SHIPS))
 SPARSE["ships"][1]["shipname"] = "KAIYO MARU"
