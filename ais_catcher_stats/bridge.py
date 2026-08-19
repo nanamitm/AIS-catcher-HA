@@ -160,6 +160,47 @@ def parse_vessels(raw):
     return vessels
 
 
+def hull_size(payload, *keys):
+    """Add up the antenna offsets AIS reports instead of a hull size.
+
+    A ship gives the distance from its antenna to bow and stern (or to port and
+    starboard); the sum is the length (or the beam).  All zeroes means the
+    vessel did not report its dimensions.
+    """
+    values = [payload.get(key) for key in keys]
+    if not all(isinstance(value, (int, float)) for value in values):
+        return None
+    return sum(values) or None
+
+
+def eta_time(payload, now=None):
+    """Resolve the AIS estimated time of arrival to a timestamp.
+
+    ETA carries month, day, hour and minute but no year, and a transponder that
+    has nothing to say sends month 0, day 0, hour 24 or minute 60.  The year
+    chosen is the one that puts the ETA closest to now, so an ETA in January
+    still resolves while the receiver is in December.
+    """
+    parts = [payload.get(key) for key in
+             ("eta_month", "eta_day", "eta_hour", "eta_minute")]
+    if not all(isinstance(value, int) for value in parts):
+        return None
+    month, day, hour, minute = parts
+    if not (1 <= month <= 12 and 1 <= day <= 31 and hour <= 23 and minute <= 59):
+        return None
+
+    now = now or datetime.now(timezone.utc)
+    best = None
+    for year in (now.year - 1, now.year, now.year + 1):
+        try:
+            candidate = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+        except ValueError:   # 31 February and friends
+            continue
+        if best is None or abs(candidate - now) < abs(best - now):
+            best = candidate
+    return best.isoformat() if best else None
+
+
 def nav_status(value):
     return NAV_STATUS.get(value) if isinstance(value, int) else None
 
@@ -415,7 +456,10 @@ class Bridge:
         payload = {"mmsi": mmsi}
         for key in ("lat", "lon", "speed", "cog", "heading", "distance", "bearing",
                     "level", "ppm", "count", "status", "shiptype", "shipname",
-                    "destination", "callsign", "imo", "last_signal"):
+                    "destination", "callsign", "imo", "last_signal",
+                    "country", "draught",
+                    "to_bow", "to_stern", "to_port", "to_starboard",
+                    "eta_month", "eta_day", "eta_hour", "eta_minute"):
             value = ship.get(key)
             if value is None:
                 continue
@@ -431,6 +475,16 @@ class Bridge:
         type_text = ship_type(payload.get("shiptype"))
         if type_text:
             payload["shiptype_text"] = type_text
+
+        for key, offsets in (("length", ("to_bow", "to_stern")),
+                             ("beam", ("to_port", "to_starboard"))):
+            size = hull_size(payload, *offsets)
+            if size is not None:
+                payload[key] = size
+
+        eta = eta_time(payload)
+        if eta:
+            payload["eta"] = eta
 
         # last_signal is the age of the last message in seconds
         age = payload.get("last_signal")

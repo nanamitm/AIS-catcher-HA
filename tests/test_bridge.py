@@ -160,7 +160,9 @@ SHIPS = {
             "ppm": 0.7, "heading": 91, "cog": 88.4, "speed": 12.3,
             "shiptype": 60, "status": 5, "shipname": "DBB ASTERIX",
             "destination": "YOKOHAMA", "callsign": "OXYZ2", "imo": 9257157,
-            "last_signal": 12,
+            "last_signal": 12, "country": "DK", "draught": 5.4,
+            "to_bow": 120, "to_stern": 30, "to_port": 12, "to_starboard": 13,
+            "eta_month": 3, "eta_day": 14, "eta_hour": 9, "eta_minute": 30,
         },
         {   # seen, but position and most dynamic data still unknown
             "mmsi": 431000123, "lat": None, "lon": None,
@@ -260,6 +262,33 @@ print("vessel state:", {k: state[k] for k in ("shipname", "status_text", "shipty
                                               "speed", "last_signal_time")})
 assert state["status_text"] == "Moored"
 assert state["shiptype_text"] == "Passenger"
+
+# static report: hull size is the sum of the antenna offsets, ETA gets a year
+assert state["length"] == 150 and state["beam"] == 25
+assert state["country"] == "DK" and state["draught"] == 5.4
+assert state["eta"].startswith(("2026-03-14T09:30", "2027-03-14T09:30")), state["eta"]
+
+from datetime import datetime, timezone  # noqa: E402
+
+# the year picked is the one closest to now, across the new year boundary
+dec = datetime(2026, 12, 28, 12, 0, tzinfo=timezone.utc)
+assert bridge.eta_time({"eta_month": 1, "eta_day": 4, "eta_hour": 6,
+                        "eta_minute": 0}, dec).startswith("2027-01-04")
+assert bridge.eta_time({"eta_month": 12, "eta_day": 30, "eta_hour": 6,
+                        "eta_minute": 0}, dec).startswith("2026-12-30")
+# "not available" is month 0 / day 0 / hour 24 / minute 60, and 31 February
+# must not raise
+for bad in ({"eta_month": 0, "eta_day": 4, "eta_hour": 6, "eta_minute": 0},
+            {"eta_month": 3, "eta_day": 0, "eta_hour": 6, "eta_minute": 0},
+            {"eta_month": 3, "eta_day": 4, "eta_hour": 24, "eta_minute": 0},
+            {"eta_month": 3, "eta_day": 4, "eta_hour": 6, "eta_minute": 60},
+            {"eta_month": 2, "eta_day": 31, "eta_hour": 6, "eta_minute": 0},
+            {}):
+    assert bridge.eta_time(bad, dec) is None, bad
+
+# a ship that reports no dimensions must not become a 0 m vessel
+assert bridge.hull_size({"to_bow": 0, "to_stern": 0}, "to_bow", "to_stern") is None
+assert bridge.hull_size({"to_bow": 10}, "to_bow", "to_stern") is None
 assert "lat" not in json.loads(published["aiscatcher/aiscatcher/vessel/431000123"])
 
 # a vessel keeps its discovery once published, and is not republished per poll

@@ -152,6 +152,29 @@ VESSEL_SENSORS = [
     ("messages", "Messages received",
      "{{ value_json.count | default(None) }}",
      "msg", None, "total_increasing", "diagnostic", "mdi:message-text-outline"),
+
+    # From the static report (message 5/24), so these stay empty until the ship
+    # has sent one -- minutes after the first position on a busy channel.
+    ("eta", "Estimated arrival",
+     "{{ value_json.eta | default(None) }}",
+     None, "timestamp", None, None, None),
+    ("country", "Country",
+     "{{ value_json.country | default(None) }}",
+     None, None, None, None, "mdi:flag"),
+    ("callsign", "Call sign",
+     "{{ value_json.callsign | default(None) }}",
+     None, None, None, "diagnostic", "mdi:card-account-details-outline"),
+    # No device_class on the three below: `distance` would let Home Assistant
+    # convert a hull size into kilometres.
+    ("length", "Length",
+     "{{ value_json.length | default(None) }}",
+     "m", None, None, "diagnostic", "mdi:arrow-expand-horizontal"),
+    ("beam", "Beam",
+     "{{ value_json.beam | default(None) }}",
+     "m", None, None, "diagnostic", "mdi:arrow-expand-vertical"),
+    ("draught", "Draught",
+     "{{ value_json.draught | default(None) }}",
+     "m", None, "measurement", "diagnostic", "mdi:arrow-expand-down"),
 ]
 
 # key, name, device_class, entity_category
