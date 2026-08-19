@@ -1,0 +1,55 @@
+configuration:
+  url:
+    name: AIS-catcher URL
+    description: >-
+      Base URL of the AIS-catcher web server, for example http://192.168.1.10:8100
+  scan_interval:
+    name: Scan interval
+    description: Seconds between two polls of stat.json.
+  device_name:
+    name: Device name
+    description: Name of the device that is created in Home Assistant.
+  device_id:
+    name: Device id
+    description: >-
+      Lowercase identifier used for entity ids and MQTT topics. Use a unique
+      value per receiver when running several instances of this add-on.
+  message_type_sensors:
+    name: Message group sensors
+    description: >-
+      Create sensors for position reports, base stations, AtoN, SAR, binary,
+      safety and other message groups.
+  remove_entities_on_stop:
+    name: Remove entities on stop
+    description: >-
+      Delete the discovery configuration when the add-on stops, so the device
+      is removed from Home Assistant instead of becoming unavailable.
+  log_level:
+    name: Log level
+    description: Set to debug to log every poll.
+  http_username:
+    name: HTTP username
+    description: Only needed when the AIS-catcher web server requires basic auth.
+  http_password:
+    name: HTTP password
+    description: Only needed when the AIS-catcher web server requires basic auth.
+  verify_ssl:
+    name: Verify SSL certificate
+    description: Disable for an AIS-catcher server with a self-signed certificate.
+  discovery_prefix:
+    name: MQTT discovery prefix
+    description: Leave empty unless you changed it from "homeassistant".
+  mqtt_host:
+    name: MQTT host
+    description: >-
+      Leave empty to use the broker provided by the Supervisor (Mosquitto add-on).
+  mqtt_port:
+    name: MQTT port
+    description: Only used together with a manual MQTT host.
+  mqtt_user:
+    name: MQTT username
+    description: Only used together with a manual MQTT host.
+  mqtt_password:
+    name: MQTT password
+    description: Only used together with a manual MQTT host.
+network: {}

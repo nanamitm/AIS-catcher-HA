@@ -1,0 +1,40 @@
+name: AIS-catcher Statistics
+version: "0.1.1"
+slug: ais_catcher_stats
+description: Publishes AIS-catcher stat.json to Home Assistant as one device via MQTT discovery
+url: https://github.com/jvde-github/AIS-catcher/issues/376
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
+init: false
+startup: application
+boot: auto
+services:
+  - mqtt:need
+options:
+  url: "http://192.168.1.10:8100"
+  scan_interval: 30
+  device_name: "AIS-catcher"
+  device_id: "aiscatcher"
+  message_type_sensors: true
+  remove_entities_on_stop: false
+  log_level: info
+schema:
+  url: url
+  scan_interval: int(5,3600)
+  device_name: str
+  device_id: match(^[a-z0-9_]+$)
+  message_type_sensors: bool
+  remove_entities_on_stop: bool
+  log_level: list(debug|info|warning|error)
+  http_username: str?
+  http_password: password?
+  verify_ssl: bool?
+  discovery_prefix: str?
+  mqtt_host: str?
+  mqtt_port: port?
+  mqtt_user: str?
+  mqtt_password: password?

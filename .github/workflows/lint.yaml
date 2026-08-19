@@ -1,0 +1,28 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  addon:
+    name: Add-on linter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the add-on manifest
+        uses: frenck/action-addon-linter@v2
+        with:
+          path: "./ais_catcher_stats"
+
+  shell:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check run.sh
+        # SC1008: the bashio shebang is not a shell shellcheck knows about.
+        # SC2155: "export X=$(...)" is the normal bashio idiom.
+        run: shellcheck --shell=bash --exclude=SC1008,SC2155 ais_catcher_stats/run.sh

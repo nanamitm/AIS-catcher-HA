@@ -1,0 +1,149 @@
+import json, os, sys, types
+
+# --- stub paho-mqtt -------------------------------------------------------
+paho = types.ModuleType("paho")
+mqtt = types.ModuleType("paho.mqtt")
+client_mod = types.ModuleType("paho.mqtt.client")
+
+
+class Client:
+    def __init__(self, *a, **kw):
+        self.published = []
+
+    def username_pw_set(self, *a):
+        pass
+
+    def will_set(self, *a, **kw):
+        pass
+
+    def connect(self, *a, **kw):
+        pass
+
+    def loop_start(self):
+        pass
+
+    def loop_stop(self):
+        pass
+
+    def disconnect(self):
+        pass
+
+    def publish(self, topic, payload, qos=0, retain=False):
+        self.published.append((topic, payload))
+
+
+client_mod.Client = Client
+mqtt.client = client_mod
+paho.mqtt = mqtt
+sys.modules["paho"] = paho
+sys.modules["paho.mqtt"] = mqtt
+sys.modules["paho.mqtt.client"] = client_mod
+
+os.environ.update({
+    "AIS_URL": "http://localhost:8100",
+    "SCAN_INTERVAL": "30",
+    "DEVICE_NAME": "AIS-catcher",
+    "DEVICE_ID": "aiscatcher",
+    "MESSAGE_TYPE_SENSORS": "true",
+    "MQTT_HOST": "core-mosquitto",
+    "MQTT_PORT": "1883",
+    "MQTT_USER": "addons",
+    "MQTT_PASS": "x",
+})
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir, "ais_catcher_stats"))
+import bridge  # noqa: E402
+
+STAT = {
+    "total": {"count": 100000, "msg": [1] * 27, "channel": [1, 2, 3, 4]},
+    "session": {"count": 5000},
+    "last_day": {"count": 40000, "vessels": 320, "dist": 41.2},
+    "last_hour": {"count": 3000, "vessels": 120, "dist": 38.51234},
+    "last_minute": {
+        "count": 57, "vessels": 30, "dist": 22.4, "ppm": 1.23,
+        "level_min": 22.5, "level_max": 44.1,
+        "channel": [30, 27],                       # only A/B present
+        "msg": [20, 5, 8, 3, 2, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 4, 0, 0, 2],
+    },
+    "msg_rate": 0.95, "vessel_count": 31, "vessel_max": 55, "tcp_clients": 2,
+    "build_version": "v0.65", "build_describe": "v0.65-abcdef", "build_date": "Jan 1 2026",
+    "run_time": "7265", "memory": 41943040, "received": 123456789,
+    # AIS-catcher reports these per receiver, i.e. as arrays (see issue report
+    # from a real install: model: ['AIS engine v1 base'], serial: ['00000060'])
+    "station": "Motorhome", "product": ["RTL2838UHIDIR"], "serial": ["00000060"],
+    "model": ["AIS engine v1 base"], "vendor": ["Realtek"],
+    "sample_rate": ["1536K"], "device_label": ["AIS 00000060"],
+    "engine_running": True, "sharing": False,
+    "os": {"x": 1}, "hardware": {"y": 2}, "outputs": [1, 2, 3],
+}
+
+cfg = bridge.Config()
+b = bridge.Bridge(cfg)
+b.fetch = lambda: json.loads(json.dumps(STAT))
+
+norm = b.normalise(b.fetch())
+print("channel:", norm["channel"])
+print("msg_group:", norm["msg_group"])
+print("memory/received:", norm["memory"], norm["received"])
+print("start_time:", norm["start_time"], "run_time:", norm["run_time"])
+assert norm["channel"] == {"A": 30, "B": 27, "C": 0, "D": 0}
+assert sum(norm["msg_group"].values()) == sum(norm["last_minute"]["msg"])
+assert norm["msg_group"]["base"] == 3 and norm["msg_group"]["aton"] == 2
+assert norm["msg_group"]["position"] == 20 + 5 + 8 + 4
+assert "os" not in norm and "outputs" not in norm
+assert len(norm["last_minute"]["msg"]) == 27
+
+# old-style human readable received string
+assert bridge.parse_size("117.7 MB") == int(117.7 * 1024 ** 2)
+assert bridge.parse_size(12345) == 12345
+assert bridge.parse_size("512 B") == 512
+assert bridge.parse_size(None) == 0
+
+# stable start_time across polls
+t1 = b.resolve_start_time(7265)
+t2 = b.resolve_start_time(7268)
+assert t1 == t2, (t1, t2)
+assert b.resolve_start_time(5) != t1
+
+# per-receiver arrays must be flattened to strings before anything sees them
+assert norm["model"] == "AIS engine v1 base", norm["model"]
+assert norm["serial"] == "00000060", norm["serial"]
+assert norm["device_label"] == "AIS 00000060", norm["device_label"]
+assert bridge.scalarise(["RTL-SDR", "SDRplay"]) == "RTL-SDR, SDRplay"
+assert bridge.scalarise([]) == ""
+assert bridge.scalarise("plain") == "plain"
+
+b.publish_discovery(norm)
+configs = [(t, json.loads(p)) for t, p in b.client.published if t.endswith("/config")]
+print("entities:", len(configs))
+ids = [c["unique_id"] for _, c in configs]
+assert len(ids) == len(set(ids)), "duplicate unique_id"
+devices = {json.dumps(c["device"], sort_keys=True) for _, c in configs}
+assert len(devices) == 1, "entities not on one device"
+print("device:", next(iter(devices)))
+
+# HA rejects the whole discovery message unless every device value is a string
+device = configs[0][1]["device"]
+for field, value in device.items():
+    if field == "identifiers":
+        assert isinstance(value, list) and all(isinstance(v, str) for v in value), field
+    else:
+        assert isinstance(value, str), "device.%s is %s, not a string" % (field, type(value))
+
+# render every template with Jinja to be sure they resolve against the payload
+try:
+    from jinja2 import Environment
+except ImportError:
+    print("jinja2 missing - template rendering skipped")
+else:
+    env = Environment()
+    env.filters.setdefault("float", lambda v, d=0.0: float(v) if str(v).replace('.', '', 1).replace('-', '', 1).isdigit() else d)
+    for topic, c in configs:
+        out = env.from_string(c["value_template"]).render(value_json=norm)
+        assert out.strip() != "", topic
+    print("all %d templates rendered" % len(configs))
+
+for topic, c in configs[:6]:
+    print(" -", c["object_id"], "=", c["value_template"])
+print("OK")

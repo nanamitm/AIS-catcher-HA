@@ -1,0 +1,2 @@
+# Only needed to render the discovery templates during the test run.
+jinja2>=3.1

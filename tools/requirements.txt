@@ -1,0 +1,2 @@
+# Only needed to regenerate icon.png / logo.png.
+pillow>=10.0
