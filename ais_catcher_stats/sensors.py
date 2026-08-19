@@ -71,6 +71,9 @@ SENSORS = [
     ("device_label", "Receiver device",
      "{{ value_json.device_label | default('unknown', true) }}",
      None, None, None, "diagnostic", "mdi:usb"),
+    ("coverage", "Coverage sectors",
+     "{{ value_json.coverage_sectors | int(0) }}",
+     "sectors", None, "measurement", "diagnostic", "mdi:radar"),
 ]
 
 # Per channel message counts (A/B/C/D) over the last minute.
@@ -119,11 +122,17 @@ FLEET_SENSORS = [
 ]
 
 # Entities that also expose attributes, read from their own state topic.
-# The template has to render a JSON object.
+# The template has to render a JSON object, so every value needs a default --
+# an undefined one cannot be serialised.
 SENSOR_ATTRIBUTES = {
     "nearest_vessel": "{{ value_json.nearest | default({}, true) | tojson }}",
     "vessels_nearby": "{{ {'radius': value_json.radius,"
                       "    'total': value_json.total} | tojson }}",
+    # The per-sector reach, for a polar plot of what the antenna hears.
+    "coverage": "{{ value_json.coverage | default({}, true) | tojson }}",
+    # Links belong with the sharing flag rather than on a sensor of their own.
+    "sharing": "{{ {'link': value_json.sharing_link | default(''),"
+               "   'station_link': value_json.station_link | default('')} | tojson }}",
 }
 
 # key, name, value_template (must render ON/OFF), device_class, entity_category

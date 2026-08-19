@@ -64,6 +64,9 @@ STAT = {
         "count": 57, "vessels": 30, "dist": 22.4, "ppm": 1.23,
         "level_min": 22.5, "level_max": 44.1,
         "channel": [30, 27],                       # only A/B present
+        # furthest message heard per compass sector, per channel
+        "radar_a": [0, 8.4, 11.2, 0, 0, 12.5, 0, 0],
+        "radar_b": [0, 0, 3.0, 0, 0, 0, 0],        # one sector short
         "msg": [20, 5, 8, 3, 2, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 4, 0, 0, 2],
     },
     "msg_rate": 0.95, "vessel_count": 31, "vessel_max": 55, "tcp_clients": 2,
@@ -75,6 +78,8 @@ STAT = {
     "model": ["AIS engine v1 base"], "vendor": ["Realtek"],
     "sample_rate": ["1536K"], "device_label": ["AIS 00000060"],
     "engine_running": True, "sharing": False,
+    "sharing_link": "https://www.aiscatcher.org/?&zoom=10&lat=35.4&lon=139.6",
+    "station_link": ["https://www.marinetraffic.com/en/ais/details/stations/1"],
     "os": {"x": 1}, "hardware": {"y": 2}, "outputs": [1, 2, 3],
 }
 
@@ -93,6 +98,15 @@ assert norm["msg_group"]["base"] == 3 and norm["msg_group"]["aton"] == 2
 assert norm["msg_group"]["position"] == 20 + 5 + 8 + 4
 assert "os" not in norm and "outputs" not in norm
 assert len(norm["last_minute"]["msg"]) == 27
+
+# coverage: sectors 1, 2 and 5 heard something, and the shorter B array must
+# not truncate the result
+print("coverage:", norm["coverage_sectors"], norm["coverage"])
+assert norm["coverage_sectors"] == 3, norm["coverage"]
+assert norm["coverage"]["sectors"] == 8 and norm["coverage"]["degrees"] == 45.0
+assert norm["coverage"]["reach"][2] == 11.2   # max of A 11.2 and B 3.0
+assert bridge.Bridge.coverage({})["coverage_sectors"] == 0
+assert bridge.Bridge.coverage({"radar_a": "nonsense"})["coverage"]["reach"] == []
 
 # old-style human readable received string
 assert bridge.parse_size("117.7 MB") == int(117.7 * 1024 ** 2)
@@ -116,6 +130,13 @@ assert bridge.scalarise("plain") == "plain"
 
 b.publish_discovery(norm)
 configs = [(t, json.loads(p)) for t, p in b.client.published if t.endswith("/config")]
+
+# attributes ride along on the entity they belong to, from the same topic
+attributed = {c["unique_id"].rsplit("_", 1)[-1]: c for _, c in configs
+              if "json_attributes_topic" in c}
+assert set(attributed) == {"coverage", "sharing"}, sorted(attributed)
+for c in attributed.values():
+    assert c["json_attributes_topic"] == c["state_topic"]
 print("entities:", len(configs))
 ids = [c["unique_id"] for _, c in configs]
 assert len(ids) == len(set(ids)), "duplicate unique_id"

@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from itertools import zip_longest
 
 import requests
 
@@ -337,6 +338,7 @@ class Bridge:
 
         minute = out["last_minute"]
         out["channel"] = dict(zip(CHANNELS, minute["channel"]))
+        out.update(self.coverage(minute))
 
         msg = minute["msg"]
         groups = {}
@@ -365,6 +367,35 @@ class Bridge:
         for noisy in ("os", "hardware", "outputs"):
             out.pop(noisy, None)
         return out
+
+    @staticmethod
+    def coverage(minute):
+        """Reception reach per compass sector, from the radar arrays.
+
+        AIS-catcher splits the horizon into equal sectors and reports the
+        furthest message heard in each one, per channel.  Summarised here as a
+        count of sectors that heard anything -- a single number that says
+        whether the antenna sees all around it -- with the arrays kept as
+        attributes so a polar plot can be drawn from them.
+        """
+        arrays = {}
+        for key in ("radar_a", "radar_b"):
+            values = minute.get(key)
+            arrays[key] = [value if isinstance(value, (int, float)) else 0
+                           for value in values] if isinstance(values, list) else []
+
+        reach = [max(a, b) for a, b in
+                 zip_longest(arrays["radar_a"], arrays["radar_b"], fillvalue=0)]
+        return {
+            "coverage_sectors": sum(1 for value in reach if value > 0),
+            "coverage": {
+                "sectors": len(reach),
+                "degrees": round(360 / len(reach), 1) if reach else 0,
+                "reach": reach,
+                "channel_a": arrays["radar_a"],
+                "channel_b": arrays["radar_b"],
+            },
+        }
 
     def stable_time(self, key, seconds_ago, tolerance=10):
         """An "N seconds ago" timestamp that does not jitter on every poll.
