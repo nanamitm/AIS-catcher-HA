@@ -45,6 +45,10 @@ entities, all grouped under **one device**: message rate, vessel counts, range,
 signal levels, PPM, per-channel and per-message-type breakdowns, plus
 diagnostics such as memory use, received bytes, uptime and version.
 
+Optionally it also tracks individual ships: list the MMSIs you care about and
+each becomes its own device with a map tracker, speed, course, distance,
+navigation status and destination.
+
 It is a bridge only — it does not run AIS-catcher itself, so it works both with
 a receiver on the same machine and with one running elsewhere on the network.
 

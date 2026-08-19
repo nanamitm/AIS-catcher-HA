@@ -111,3 +111,83 @@ BINARY_SENSORS = [
      "{{ 'ON' if value_json.sharing else 'OFF' }}",
      None, "diagnostic"),
 ]
+
+
+# --- per vessel -----------------------------------------------------------
+# These read the payload published to aiscatcher/<device_id>/vessel/<mmsi>.
+# AIS-catcher omits fields it has not received yet, and the bridge drops nulls,
+# so every optional value falls back through `default('unknown')` - which Home
+# Assistant renders as the unknown state.  `default` without `true` only fires
+# on a missing key, so a legitimate 0 (speed, bearing) survives.
+VESSEL_SENSORS = [
+    ("speed", "Speed",
+     "{{ value_json.speed | default('unknown') }}",
+     "kn", "speed", "measurement", None, "mdi:speedometer"),
+    ("course", "Course over ground",
+     "{{ value_json.cog | default('unknown') }}",
+     "°", None, "measurement", None, "mdi:compass"),
+    ("heading", "Heading",
+     "{{ value_json.heading | default('unknown') }}",
+     "°", None, "measurement", None, "mdi:compass-outline"),
+    ("distance", "Distance",
+     "{{ value_json.distance | default('unknown') }}",
+     "nmi", "distance", "measurement", None, None),
+    ("bearing", "Bearing",
+     "{{ value_json.bearing | default('unknown') }}",
+     "°", None, "measurement", None, "mdi:compass-rose"),
+    ("status", "Navigation status",
+     "{{ value_json.status_text | default('unknown') }}",
+     None, None, None, None, "mdi:ferry"),
+    ("destination", "Destination",
+     "{{ value_json.destination | default('unknown') }}",
+     None, None, None, None, "mdi:map-marker-path"),
+    ("last_signal", "Last signal",
+     "{{ value_json.last_signal_time | default('unknown') }}",
+     None, "timestamp", None, "diagnostic", None),
+    ("level", "Signal level",
+     "{{ value_json.level | default('unknown') }}",
+     "dB", "signal_strength", "measurement", "diagnostic", None),
+    ("messages", "Messages received",
+     "{{ value_json.count | default('unknown') }}",
+     "msg", None, "total_increasing", "diagnostic", "mdi:message-text-outline"),
+]
+
+# AIS navigation status (message types 1/2/3), field "status".
+NAV_STATUS = {
+    0: "Under way using engine",
+    1: "At anchor",
+    2: "Not under command",
+    3: "Restricted manoeuvrability",
+    4: "Constrained by draught",
+    5: "Moored",
+    6: "Aground",
+    7: "Engaged in fishing",
+    8: "Under way sailing",
+    11: "Towing astern",
+    12: "Pushing ahead",
+    14: "AIS-SART active",
+}
+
+# Ship type ranges, field "shiptype".
+SHIP_TYPES = [
+    (20, 29, "Wing in ground"),
+    (30, 30, "Fishing"),
+    (31, 32, "Towing"),
+    (33, 33, "Dredging"),
+    (34, 34, "Diving operations"),
+    (35, 35, "Military operations"),
+    (36, 36, "Sailing"),
+    (37, 37, "Pleasure craft"),
+    (40, 49, "High speed craft"),
+    (50, 50, "Pilot vessel"),
+    (51, 51, "Search and rescue"),
+    (52, 52, "Tug"),
+    (53, 53, "Port tender"),
+    (54, 54, "Anti-pollution"),
+    (55, 55, "Law enforcement"),
+    (58, 58, "Medical transport"),
+    (60, 69, "Passenger"),
+    (70, 79, "Cargo"),
+    (80, 89, "Tanker"),
+    (90, 99, "Other"),
+]

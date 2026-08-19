@@ -30,11 +30,13 @@ except ImportError:  # paho-mqtt 1.x
     def make_client(client_id):
         return MqttClient(client_id=client_id)
 
-from sensors import BINARY_SENSORS, MESSAGE_GROUPS, SENSORS
+from sensors import (BINARY_SENSORS, MESSAGE_GROUPS, NAV_STATUS, SENSORS,
+                     SHIP_TYPES, VESSEL_SENSORS)
 
 LOG = logging.getLogger("ais-bridge")
 
 STAT_PATHS = ("/api/stat.json", "/stat.json")
+SHIP_PATHS = ("/api/ships.json", "/ships.json")
 CHANNELS = "ABCD"
 MSG_TYPES = 27  # AIS message types 1..27, msg[i] holds type i + 1
 
@@ -89,9 +91,59 @@ class Config:
         self.mqtt_pass = env("MQTT_PASS")
         self.log_level = env("LOG_LEVEL", "info").upper()
 
+        self.vessels = parse_vessels(env("VESSELS", "[]"))
+        self.vessel_timeout = int(env("VESSEL_TIMEOUT", "30")) * 60
+
         self.base_topic = "aiscatcher/%s" % self.device_id
         self.state_topic = "%s/state" % self.base_topic
         self.availability_topic = "%s/status" % self.base_topic
+
+    def vessel_topic(self, mmsi, suffix=""):
+        return "%s/vessel/%d%s" % (self.base_topic, mmsi, suffix)
+
+
+def parse_vessels(raw):
+    """Read the `vessels` add-on option: [{"mmsi": 219025528, "name": "..."}]."""
+    try:
+        entries = json.loads(raw or "[]")
+    except ValueError as err:
+        LOG.error("Cannot read the vessels option (%s), continuing without it", err)
+        return []
+    if not isinstance(entries, list):
+        LOG.error("The vessels option is not a list, continuing without it")
+        return []
+
+    vessels, seen = [], set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            mmsi = int(entry.get("mmsi"))
+        except (TypeError, ValueError):
+            LOG.warning("Skipping a vessel without a usable MMSI: %r", entry)
+            continue
+        if not 1 <= mmsi <= 999999999:
+            LOG.warning("Skipping vessel %s: not a valid MMSI", mmsi)
+            continue
+        if mmsi in seen:
+            LOG.warning("Skipping duplicate vessel %s", mmsi)
+            continue
+        seen.add(mmsi)
+        vessels.append({"mmsi": mmsi, "name": str(entry.get("name") or "").strip()})
+    return vessels
+
+
+def nav_status(value):
+    return NAV_STATUS.get(value) if isinstance(value, int) else None
+
+
+def ship_type(value):
+    if not isinstance(value, int):
+        return None
+    for low, high, name in SHIP_TYPES:
+        if low <= value <= high:
+            return name
+    return None
 
 
 def parse_size(value):
@@ -137,8 +189,12 @@ class Bridge:
         self.cfg = config
         self.stop_event = threading.Event()
         self.stat_path = None
-        self.start_time = None
+        self.ship_path = None
+        self.anchors = {}
         self.discovered = False
+        self.vessel_names = {}   # mmsi -> the name the discovery was published with
+        self.ship_names = {}     # mmsi -> last shipname heard over the air
+        self.vessel_seen = set()  # mmsi currently published as online
         self.session = requests.Session()
         self.client = make_client("ais_catcher_stats_%s" % config.device_id)
         if config.mqtt_user:
@@ -148,7 +204,15 @@ class Bridge:
     # --- HTTP -----------------------------------------------------------
 
     def fetch(self):
-        paths = (self.stat_path,) if self.stat_path else STAT_PATHS
+        return self.get_json("stat_path", STAT_PATHS)
+
+    def fetch_ships(self):
+        return self.get_json("ship_path", SHIP_PATHS)
+
+    def get_json(self, remembered, candidates):
+        """GET the first endpoint that answers, then stick to it."""
+        known = getattr(self, remembered)
+        paths = (known,) if known else candidates
         last_error = None
         for path in paths:
             try:
@@ -165,11 +229,11 @@ class Bridge:
                 last_error = RuntimeError("%s returned 404" % path)
                 continue
             response.raise_for_status()
-            if self.stat_path != path:
-                LOG.info("Using statistics endpoint %s", path)
-                self.stat_path = path
+            if known != path:
+                LOG.info("Using endpoint %s", path)
+                setattr(self, remembered, path)
             return response.json()
-        raise last_error or RuntimeError("no statistics endpoint responded")
+        raise last_error or RuntimeError("no endpoint responded")
 
     # --- payload --------------------------------------------------------
 
@@ -220,13 +284,22 @@ class Bridge:
             out.pop(noisy, None)
         return out
 
+    def stable_time(self, key, seconds_ago, tolerance=10):
+        """An "N seconds ago" timestamp that does not jitter on every poll.
+
+        The value only moves when it really moved, so Home Assistant does not
+        record a new state each cycle.
+        """
+        candidate = (datetime.now(timezone.utc).replace(microsecond=0)
+                     - timedelta(seconds=seconds_ago))
+        anchor = self.anchors.get(key)
+        if anchor is None or abs((candidate - anchor).total_seconds()) > tolerance:
+            self.anchors[key] = candidate
+            anchor = candidate
+        return anchor.isoformat()
+
     def resolve_start_time(self, run_time):
-        """Keep the timestamp stable; only re-anchor on a restart or real drift."""
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        candidate = now - timedelta(seconds=run_time)
-        if self.start_time is None or abs((candidate - self.start_time).total_seconds()) > 10:
-            self.start_time = candidate
-        return self.start_time.isoformat()
+        return self.stable_time("start_time", run_time)
 
     # --- discovery ------------------------------------------------------
 
@@ -302,10 +375,174 @@ class Bridge:
         LOG.info("Published discovery for %d entities as device '%s'",
                  count, self.cfg.device_name)
 
+    # --- vessels --------------------------------------------------------
+
+    def vessel_payload(self, ship):
+        """Normalise one entry of ships.json.
+
+        Keys AIS-catcher has not received are absent, and nulls are dropped, so
+        the templates can fall back with `default('unknown')` while a real 0
+        still comes through.
+        """
+        mmsi = int(ship["mmsi"])
+        payload = {"mmsi": mmsi}
+        for key in ("lat", "lon", "speed", "cog", "heading", "distance", "bearing",
+                    "level", "ppm", "count", "status", "shiptype", "shipname",
+                    "destination", "callsign", "imo", "last_signal"):
+            value = ship.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str):
+                value = value.strip()
+                if not value:
+                    continue
+            payload[key] = value
+
+        status_text = nav_status(payload.get("status"))
+        if status_text:
+            payload["status_text"] = status_text
+        type_text = ship_type(payload.get("shiptype"))
+        if type_text:
+            payload["shiptype_text"] = type_text
+
+        # last_signal is the age of the last message in seconds
+        age = payload.get("last_signal")
+        if isinstance(age, (int, float)):
+            payload["last_signal_time"] = self.stable_time("vessel_%d" % mmsi, age)
+        return payload
+
+    def vessel_name(self, mmsi, configured, payload):
+        """A name that never downgrades.
+
+        A ship out of range reports nothing, so without remembering the last
+        known shipname the device would flip back to "MMSI ..." and republish
+        its discovery every time the vessel leaves and returns.
+        """
+        if payload.get("shipname"):
+            self.ship_names[mmsi] = payload["shipname"]
+        return configured or self.ship_names.get(mmsi) or "MMSI %d" % mmsi
+
+    def vessel_device(self, mmsi, name, payload):
+        device = {
+            "identifiers": ["aiscatcher_vessel_%d" % mmsi],
+            "name": name,
+            "manufacturer": "AIS",
+            "model": payload.get("shiptype_text") or "Vessel",
+            "via_device": "aiscatcher_%s" % self.cfg.device_id,
+        }
+        if payload.get("imo"):
+            device["serial_number"] = "IMO %s" % payload["imo"]
+        return device
+
+    def publish_vessel_discovery(self, mmsi, name, payload):
+        device = self.vessel_device(mmsi, name, payload)
+        state_topic = self.cfg.vessel_topic(mmsi)
+        availability = self.cfg.vessel_topic(mmsi, "/status")
+        prefix = "%s/%%s/aiscatcher_vessel_%d/%%s/config" % (self.cfg.discovery_prefix, mmsi)
+
+        # The tracker takes its position from a dedicated attributes topic, so
+        # Home Assistant can place it on the map without a state template.
+        tracker = {
+            "name": "Location",
+            "unique_id": "aiscatcher_vessel_%d_location" % mmsi,
+            "object_id": "%s_%d_location" % (self.cfg.device_id, mmsi),
+            "json_attributes_topic": self.cfg.vessel_topic(mmsi, "/position"),
+            "availability_topic": availability,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "source_type": "gps",
+            "device": device,
+        }
+        self.client.publish(prefix % ("device_tracker", "location"),
+                            json.dumps(tracker), qos=1, retain=True)
+
+        for key, ename, tmpl, unit, dclass, sclass, ecat, icon in VESSEL_SENSORS:
+            config = {
+                "name": ename,
+                "unique_id": "aiscatcher_vessel_%d_%s" % (mmsi, key),
+                "object_id": "%s_%d_%s" % (self.cfg.device_id, mmsi, key),
+                "state_topic": state_topic,
+                "value_template": tmpl,
+                "availability_topic": availability,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "device": device,
+            }
+            for field, value in (("unit_of_measurement", unit),
+                                 ("device_class", dclass),
+                                 ("state_class", sclass),
+                                 ("entity_category", ecat),
+                                 ("icon", icon)):
+                if value:
+                    config[field] = value
+            self.client.publish(prefix % ("sensor", key), json.dumps(config),
+                                qos=1, retain=True)
+
+        self.vessel_names[mmsi] = name
+        LOG.info("Published discovery for vessel %d as '%s'", mmsi, name)
+
+    def publish_vessels(self, ships):
+        """Publish one device per configured vessel from a ships.json response."""
+        index = {}
+        for ship in ships.get("ships", []) or []:
+            try:
+                index[int(ship["mmsi"])] = ship
+            except (KeyError, TypeError, ValueError):
+                continue
+
+        for vessel in self.cfg.vessels:
+            mmsi, configured = vessel["mmsi"], vessel["name"]
+            ship = index.get(mmsi)
+            payload = self.vessel_payload(ship) if ship else {}
+
+            age = payload.get("last_signal")
+            fresh = bool(ship) and not (
+                isinstance(age, (int, float)) and age > self.cfg.vessel_timeout)
+
+            name = self.vessel_name(mmsi, configured, payload)
+            if self.vessel_names.get(mmsi) != name:
+                self.publish_vessel_discovery(mmsi, name, payload)
+
+            if not fresh:
+                if mmsi in self.vessel_seen:
+                    LOG.info("Vessel %d (%s) is out of range", mmsi, name)
+                    self.vessel_seen.discard(mmsi)
+                self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
+                                    "offline", qos=1, retain=True)
+                continue
+
+            if mmsi not in self.vessel_seen:
+                LOG.info("Vessel %d (%s) is in range", mmsi, name)
+                self.vessel_seen.add(mmsi)
+
+            self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
+                                "online", qos=1, retain=True)
+            self.client.publish(self.cfg.vessel_topic(mmsi),
+                                json.dumps(payload), qos=0, retain=True)
+
+            lat, lon = payload.get("lat"), payload.get("lon")
+            if lat is not None and lon is not None:
+                self.client.publish(
+                    self.cfg.vessel_topic(mmsi, "/position"),
+                    json.dumps({"latitude": lat, "longitude": lon,
+                                "gps_accuracy": 0}),
+                    qos=0, retain=True)
+
     def remove_discovery(self):
         for component, key in [(c, k) for c, k, *_ in self.entities()]:
             self.client.publish(self.discovery_topic(component, key), "", qos=1, retain=True)
         self.client.publish(self.cfg.state_topic, "", qos=1, retain=True)
+
+        for mmsi in self.vessel_names:
+            prefix = "%s/%%s/aiscatcher_vessel_%d/%%s/config" % (
+                self.cfg.discovery_prefix, mmsi)
+            self.client.publish(prefix % ("device_tracker", "location"), "",
+                                qos=1, retain=True)
+            for key, *_ in VESSEL_SENSORS:
+                self.client.publish(prefix % ("sensor", key), "", qos=1, retain=True)
+            for suffix in ("", "/position", "/status"):
+                self.client.publish(self.cfg.vessel_topic(mmsi, suffix), "",
+                                    qos=1, retain=True)
         LOG.info("Removed discovery configuration from the broker")
 
     # --- main loop ------------------------------------------------------
@@ -340,6 +577,13 @@ class Bridge:
                 failures = 0
                 LOG.debug("Published %s vessels, %.2f msg/s",
                           stat.get("vessel_count", 0), stat.get("msg_rate", 0.0))
+
+                if self.cfg.vessels:
+                    # A tracker hiccup must not take the statistics down with it
+                    try:
+                        self.publish_vessels(self.fetch_ships())
+                    except Exception as err:
+                        LOG.warning("Cannot read the vessel list: %s", err)
             except Exception as err:  # keep the bridge alive on any hiccup
                 failures += 1
                 self.client.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
@@ -350,6 +594,10 @@ class Bridge:
 
         if self.cfg.remove_on_stop:
             self.remove_discovery()
+        else:
+            for mmsi in self.vessel_names:
+                self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
+                                    "offline", qos=1, retain=True)
         self.client.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
         time.sleep(0.5)
         self.client.loop_stop()

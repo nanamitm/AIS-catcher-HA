@@ -24,6 +24,17 @@ configuration:
     description: >-
       Delete the discovery configuration when the add-on stops, so the device
       is removed from Home Assistant instead of becoming unavailable.
+  vessels:
+    name: Tracked vessels
+    description: >-
+      Vessels to publish as their own device with a map tracker. Add one entry
+      per ship: the MMSI is required, the name is optional and overrides the
+      name broadcast by the vessel.
+  vessel_timeout:
+    name: Vessel timeout
+    description: >-
+      Minutes without a message after which a tracked vessel is marked
+      unavailable.
   log_level:
     name: Log level
     description: Set to debug to log every poll.

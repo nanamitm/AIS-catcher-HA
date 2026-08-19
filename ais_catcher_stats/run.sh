@@ -8,6 +8,14 @@ export DEVICE_ID="$(bashio::config 'device_id')"
 export MESSAGE_TYPE_SENSORS="$(bashio::config 'message_type_sensors')"
 export REMOVE_ON_STOP="$(bashio::config 'remove_entities_on_stop')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
+export VESSEL_TIMEOUT="$(bashio::config 'vessel_timeout' '30')"
+
+# A list of objects: bashio returns it as JSON, which bridge.py parses.
+VESSELS="$(bashio::config 'vessels' '[]' | jq -c '.' 2>/dev/null)"
+if [ -z "${VESSELS}" ]; then
+    VESSELS="[]"
+fi
+export VESSELS
 export DISCOVERY_PREFIX="$(bashio::config 'discovery_prefix' 'homeassistant')"
 export HTTP_USERNAME="$(bashio::config 'http_username' '')"
 export HTTP_PASSWORD="$(bashio::config 'http_password' '')"
@@ -33,4 +41,5 @@ else
 fi
 
 bashio::log.info "Polling ${AIS_URL} every ${SCAN_INTERVAL}s -> MQTT ${MQTT_HOST}:${MQTT_PORT}"
+bashio::log.info "Tracking $(echo "${VESSELS}" | jq -r 'length') vessel(s)"
 exec python3 /bridge.py

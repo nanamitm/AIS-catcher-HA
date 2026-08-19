@@ -147,3 +147,133 @@ else:
 for topic, c in configs[:6]:
     print(" -", c["object_id"], "=", c["value_template"])
 print("OK")
+
+# --- vessel trackers ------------------------------------------------------
+
+SHIPS = {
+    "count": 3,
+    "station": {"lat": 35.44, "lon": 139.64, "mmsi": 0, "gps": False},
+    "ships": [
+        {   # fully populated, moored ferry
+            "mmsi": 219025528, "lat": 35.4512, "lon": 139.6431,
+            "distance": 1.83, "bearing": 214.0, "level": 32.5, "count": 811,
+            "ppm": 0.7, "heading": 91, "cog": 88.4, "speed": 12.3,
+            "shiptype": 60, "status": 5, "shipname": "DBB ASTERIX",
+            "destination": "YOKOHAMA", "callsign": "OXYZ2", "imo": 9257157,
+            "last_signal": 12,
+        },
+        {   # seen, but position and most dynamic data still unknown
+            "mmsi": 431000123, "lat": None, "lon": None,
+            "distance": None, "bearing": None, "count": 3,
+            "shiptype": 70, "status": 0, "last_signal": 40,
+        },
+        {   # heard once, long ago
+            "mmsi": 999000111, "lat": 35.1, "lon": 139.1, "count": 1,
+            "last_signal": 7200,
+        },
+    ],
+    "error": False,
+}
+
+os.environ["VESSELS"] = json.dumps([
+    {"mmsi": 219025528, "name": "DBB Asterix"},
+    {"mmsi": 431000123},
+    {"mmsi": 999000111, "name": "Rare visitor"},
+    {"mmsi": 111222333, "name": "Never heard"},
+    {"mmsi": "not a number"},          # dropped with a warning
+    {"mmsi": 219025528, "name": "dup"},  # dropped as a duplicate
+])
+os.environ["VESSEL_TIMEOUT"] = "30"   # minutes
+
+cfg = bridge.Config()
+assert [v["mmsi"] for v in cfg.vessels] == [219025528, 431000123, 999000111, 111222333]
+assert cfg.vessel_timeout == 1800
+
+v = bridge.Bridge(cfg)
+v.publish_vessels(json.loads(json.dumps(SHIPS)))
+
+published = dict(v.client.published)
+vessel_configs = [(t, json.loads(p)) for t, p in v.client.published
+                  if t.endswith("/config") and "aiscatcher_vessel_" in t]
+print("vessel entities:", len(vessel_configs))
+assert len(vessel_configs) == 4 * (len(bridge.VESSEL_SENSORS) + 1)
+
+# one tracker per vessel, all linked to the receiver device
+trackers = [c for t, c in vessel_configs if "/device_tracker/" in t]
+assert len(trackers) == 4
+for tracker in trackers:
+    assert tracker["source_type"] == "gps"
+    assert tracker["device"]["via_device"] == "aiscatcher_aiscatcher"
+    assert tracker["json_attributes_topic"].endswith("/position")
+
+names = {c["device"]["identifiers"][0]: c["device"]["name"] for _, c in vessel_configs}
+print("names:", names)
+assert names["aiscatcher_vessel_219025528"] == "DBB Asterix"   # configured name wins
+assert names["aiscatcher_vessel_431000123"] == "MMSI 431000123"  # no name known yet
+assert names["aiscatcher_vessel_111222333"] == "Never heard"
+
+# device metadata comes from the ship report
+ferry = [c for _, c in vessel_configs if c["device"]["identifiers"][0].endswith("219025528")][0]
+assert ferry["device"]["model"] == "Passenger", ferry["device"]
+assert ferry["device"]["serial_number"] == "IMO 9257157"
+for field, value in ferry["device"].items():
+    if field != "identifiers":
+        assert isinstance(value, str), field
+
+# availability: fresh -> online, stale or unseen -> offline
+assert published["aiscatcher/aiscatcher/vessel/219025528/status"] == "online"
+assert published["aiscatcher/aiscatcher/vessel/431000123/status"] == "online"
+assert published["aiscatcher/aiscatcher/vessel/999000111/status"] == "offline"  # 2h old
+assert published["aiscatcher/aiscatcher/vessel/111222333/status"] == "offline"  # not seen
+
+# position is only published when there is one
+assert "aiscatcher/aiscatcher/vessel/219025528/position" in published
+assert "aiscatcher/aiscatcher/vessel/431000123/position" not in published
+position = json.loads(published["aiscatcher/aiscatcher/vessel/219025528/position"])
+assert position == {"latitude": 35.4512, "longitude": 139.6431, "gps_accuracy": 0}
+
+state = json.loads(published["aiscatcher/aiscatcher/vessel/219025528"])
+print("vessel state:", {k: state[k] for k in ("shipname", "status_text", "shiptype_text",
+                                              "speed", "last_signal_time")})
+assert state["status_text"] == "Moored"
+assert state["shiptype_text"] == "Passenger"
+assert "lat" not in json.loads(published["aiscatcher/aiscatcher/vessel/431000123"])
+
+# a vessel keeps its discovery once published, and is not republished per poll
+before = len([t for t, _ in v.client.published if t.endswith("/config")])
+v.publish_vessels(json.loads(json.dumps(SHIPS)))
+after = len([t for t, _ in v.client.published if t.endswith("/config")])
+assert before == after, "discovery was republished unnecessarily"
+
+# timestamps must not jitter between polls
+again = json.loads(dict(v.client.published)["aiscatcher/aiscatcher/vessel/219025528"])
+assert again["last_signal_time"] == state["last_signal_time"]
+
+try:
+    from jinja2 import Environment
+except ImportError:
+    pass
+else:
+    env = Environment()
+    for topic, c in vessel_configs:
+        if "value_template" not in c:
+            continue
+        env.from_string(c["value_template"]).render(value_json=state)
+        env.from_string(c["value_template"]).render(
+            value_json=json.loads(published["aiscatcher/aiscatcher/vessel/431000123"]))
+    print("all vessel templates rendered, including the sparse ship")
+
+print("VESSELS OK")
+
+# a vessel that goes out of range keeps the name it was discovered with
+SPARSE = json.loads(json.dumps(SHIPS))
+SPARSE["ships"][1]["shipname"] = "KAIYO MARU"
+v.publish_vessels(SPARSE)
+count_after_name = len([t for t, _ in v.client.published if t.endswith("/config")])
+assert v.vessel_names[431000123] == "KAIYO MARU", v.vessel_names[431000123]
+
+v.publish_vessels({"ships": []})          # every vessel out of range
+assert v.vessel_names[431000123] == "KAIYO MARU", "name downgraded when out of range"
+assert len([t for t, _ in v.client.published if t.endswith("/config")]) == count_after_name
+assert dict(v.client.published)["aiscatcher/aiscatcher/vessel/219025528/status"] == "offline"
+print("NAME PERSISTENCE OK")

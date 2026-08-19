@@ -6,7 +6,8 @@ instance into Home Assistant entities.
 This is a **bridge only** — it does not run AIS-catcher itself. Point it at any
 AIS-catcher web server on your network (or at the AIS-catcher add-on running on
 the same machine) and it publishes ~35 entities, all grouped under a single
-Home Assistant device.
+Home Assistant device. It can also track individual ships as their own devices,
+see [Vessel trackers](#vessel-trackers).
 
 It replaces the `rest:` + `template:` YAML from
 [issue #376](https://github.com/jvde-github/AIS-catcher/issues/376) — same data,
@@ -37,6 +38,8 @@ no YAML, and the entities actually end up on one device.
 | `device_name` | `AIS-catcher` | Name of the device in Home Assistant. |
 | `device_id` | `aiscatcher` | Identifier used in entity ids and MQTT topics. Give each receiver its own value if you run several instances of this add-on. |
 | `message_type_sensors` | `true` | Adds the nine per message-group sensors. |
+| `vessels` | empty | Vessels to track as their own device, see below. |
+| `vessel_timeout` | `30` | Minutes without a message after which a tracked vessel goes unavailable. |
 | `remove_entities_on_stop` | `false` | Clears the discovery topics when the add-on stops, so the device disappears from Home Assistant instead of going unavailable. |
 | `log_level` | `info` | `debug` logs every poll. |
 
@@ -69,6 +72,43 @@ Long-term statistics work out of the box: counters carry `state_class`, the
 byte counters use `device_class: data_size`, distances `device_class: distance`,
 and uptime is a `timestamp` (so it does not produce a sawtooth graph).
 
+## Vessel trackers
+
+Add the ships you care about under `vessels` and each one becomes its own
+Home Assistant device, linked to the receiver:
+
+```yaml
+vessels:
+  - mmsi: 219025528
+    name: DBB Asterix     # optional, overrides the name the ship broadcasts
+  - mmsi: 431000123       # name is picked up from the AIS broadcast
+```
+
+Per vessel you get a `device_tracker` (source type GPS, so it shows on the map
+and triggers zone automations) plus sensors for speed, course over ground,
+heading, distance, bearing, navigation status, destination, and — as
+diagnostics — last signal, signal level and message count. Values the ship has
+not broadcast yet stay `unknown` rather than showing a wrong 0.
+
+This replaces the hand-written per-ship MQTT YAML from
+[issue #376](https://github.com/jvde-github/AIS-catcher/issues/376): no
+templates, no `unique_id` to invent, and the entities are grouped per ship.
+
+A vessel that has not been heard for `vessel_timeout` minutes (or that has left
+the receiver's range) goes `unavailable`, so automations can tell "not here"
+from "here, but stationary". The device and its last position remain, and the
+entities come back as soon as the ship is heard again.
+
+Notes:
+
+- Tracking is polled on the same `scan_interval` as the statistics, from
+  `/api/ships.json`. Ten vessels cost one extra HTTP request per cycle, not ten.
+- The name shown is the configured name, otherwise the last name broadcast by
+  the ship, otherwise `MMSI <number>`. Once a name has been heard it is kept
+  even while the ship is out of range.
+- A vessel that is configured but never heard still appears, as an unavailable
+  device — which is also how a mistyped MMSI shows up.
+
 ## Notes
 
 - `Received total` is exposed in bytes with `state_class: total_increasing`.
@@ -92,6 +132,10 @@ the MQTT integration, or set `mqtt_host` manually.
 **"Cannot read statistics from ..."** — check that the URL is reachable from the
 Home Assistant host and that AIS-catcher was started with the web server
 enabled. From an SSH add-on: `curl http://<host>:8100/api/stat.json`.
+
+**A tracked vessel stays unavailable** — it has not been heard yet. Check that
+the MMSI is right and that the ship appears in the AIS-catcher map, and remember
+that `vessel_timeout` (30 minutes by default) marks a silent ship unavailable.
 
 **Entities did not appear** — the discovery messages are sent once at startup;
 restart the add-on after changing `device_name` or `device_id`. Renaming

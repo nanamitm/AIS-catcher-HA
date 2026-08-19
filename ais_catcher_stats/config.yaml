@@ -1,7 +1,7 @@
 name: AIS-catcher Statistics
-version: "0.1.1"
+version: "0.2.0"
 slug: ais_catcher_stats
-description: Publishes AIS-catcher stat.json to Home Assistant as one device via MQTT discovery
+description: AIS-catcher statistics and vessel trackers in Home Assistant, via MQTT discovery
 url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher_stats
 arch:
   - aarch64
@@ -17,6 +17,8 @@ options:
   message_type_sensors: true
   remove_entities_on_stop: false
   log_level: info
+  vessels: []
+  vessel_timeout: 30
 schema:
   url: url
   scan_interval: int(5,3600)
@@ -25,6 +27,10 @@ schema:
   message_type_sensors: bool
   remove_entities_on_stop: bool
   log_level: list(debug|info|warning|error)
+  vessels:
+    - mmsi: int(1,999999999)
+      name: str?
+  vessel_timeout: int(1,1440)
   http_username: str?
   http_password: password?
   verify_ssl: bool?
