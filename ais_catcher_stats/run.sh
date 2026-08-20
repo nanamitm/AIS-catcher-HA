@@ -52,8 +52,24 @@ fi
 # The ingress panel: nginx proxies the AIS-catcher web UI so it shows up in the
 # Home Assistant sidebar.  Only the upstream and its credentials vary, so they
 # go in a snippet that /etc/nginx/nginx.conf includes.
+#
+# A host name written straight into proxy_pass is resolved once, when nginx
+# starts, and cached for the life of the process.  A receiver on DHCP or mDNS
+# that changes address then leaves the panel on 502 for good while the
+# statistics keep working, with nothing in the log to say why.  Going through a
+# variable makes nginx resolve per request, which needs an explicit resolver --
+# the container's own, so it keeps resolving whatever it resolves today.
+RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)"
 {
-    echo "proxy_pass ${AIS_URL}/;"
+    if [ -n "${RESOLVER}" ]; then
+        echo "resolver ${RESOLVER} valid=30s;"
+        echo "set \$ais_upstream \"${AIS_URL}\";"
+        # With a variable nginx no longer appends the location's URI, so the
+        # request path has to be passed on explicitly.
+        echo 'proxy_pass $ais_upstream$request_uri;'
+    else
+        echo "proxy_pass ${AIS_URL}/;"
+    fi
     case "${AIS_URL}" in
         https://*)
             echo "proxy_ssl_server_name on;"
@@ -72,15 +88,22 @@ fi
     fi
 } > /etc/nginx/upstream.conf
 
+if [ -z "${RESOLVER}" ]; then
+    bashio::log.warning "No nameserver found; the web UI proxy will keep the receiver address it starts with."
+fi
+
 # nginx workers drop to an unprivileged user, so its scratch space has to be
 # writable by them.
 mkdir -p /tmp/nginx_client_body /tmp/nginx_proxy
 chmod 777 /tmp/nginx_client_body /tmp/nginx_proxy
-if nginx -t > /dev/null 2>&1 && nginx; then
+if NGINX_CHECK="$(nginx -t 2>&1)" && nginx; then
     bashio::log.info "Web UI proxied to the sidebar panel."
 else
-    # A broken panel must not take the statistics down with it.
+    # A broken panel must not take the statistics down with it, but the reason
+    # has to reach the log -- DOCS.md sends people here to find out why the
+    # panel is empty.
     bashio::log.warning "Could not start the web UI proxy; the sidebar panel will be empty."
+    bashio::log.warning "${NGINX_CHECK}"
 fi
 
 bashio::log.info "Polling ${AIS_URL} every ${SCAN_INTERVAL}s -> MQTT ${MQTT_HOST}:${MQTT_PORT}"

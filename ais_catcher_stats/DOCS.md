@@ -195,6 +195,10 @@ Notes:
   that have no entity of their own, e.g. `value_json.msg_types['21']`.
 - `ships.json` is only requested when something needs it — a tracked vessel or
   `fleet_sensors`. With both off, the add-on polls `stat.json` alone.
+- Removing a vessel from `vessels` also removes its device from Home Assistant
+  on the next start. The add-on keeps the list it has published for in
+  `/data/known_vessels.json`, because a vessel's discovery stays retained in
+  the broker after its option is gone.
 
 ## Troubleshooting
 
@@ -215,9 +219,9 @@ off before it had a panel. Turn it on under **Settings → Add-ons → AIS-catch
 Statistics → Show in sidebar**. A fresh install has it on already.
 
 **The sidebar panel is empty** — check the add-on log. `Could not start the web
-UI proxy` means nginx did not come up; anything else means the receiver's web
-server did not answer, and `curl <url>` from an SSH add-on will say why. The
-statistics are unaffected either way.
+UI proxy` is followed by what nginx objected to; anything else means the
+receiver's web server did not answer, and `curl <url>` from an SSH add-on will
+say why. The statistics are unaffected either way.
 
 **A vessel appears twice, or its entities end in `_2`** — from the 0.4.1
 rename. 0.4.2 clears the old discovery on start, so the duplicate device goes

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.3
+
+- Fix: every start logged `Reconnected to MQTT` and announced all 36 entities a
+  second time. The first connection's CONNACK arrives on the MQTT thread, often
+  after the first poll has already published, and was read as a reconnect.
+- Fix: that reconnect handling ran on the MQTT thread and cleared state the
+  main thread was walking, which could abort the shutdown cleanup halfway; and
+  because it also cleared the record of what had been announced, a stop within
+  30 seconds of a reconnect cleaned up no vessel at all.
+- Fix: a brief broker outage reported every discovery message as lost. Those
+  are sent with QoS 1, which paho keeps and delivers on the next connection —
+  only a QoS 0 message is really dropped.
+- Fix: removing a vessel from `vessels` left its device in Home Assistant
+  forever, stuck offline, because its discovery stays retained in the broker.
+  The vessels published for are remembered in `/data` and cleared when they
+  are dropped, which also lets the 0.4.2 sweep reach vessels that were removed
+  before it existed.
+- Fix: the sidebar panel kept the receiver's IP address from the moment it
+  started, so a receiver on DHCP or mDNS that moved left the panel on 502 for
+  good. The address is now looked up again every 30 seconds.
+- `nginx -t` output is logged when the panel fails to start, instead of being
+  discarded — DOCS sends you to that log.
+
 ## 0.4.2
 
 - Fix: after the 0.4.1 rename, every tracked vessel appeared **twice**. The
