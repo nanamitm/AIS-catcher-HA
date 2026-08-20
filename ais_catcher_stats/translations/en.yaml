@@ -72,4 +72,3 @@ configuration:
   mqtt_password:
     name: MQTT password
     description: Only used together with a manual MQTT host.
-network: {}
