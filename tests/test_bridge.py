@@ -6,9 +6,17 @@ mqtt = types.ModuleType("paho.mqtt")
 client_mod = types.ModuleType("paho.mqtt.client")
 
 
+class Info:
+    """What paho returns from publish(): rc is 0 unless the message was lost."""
+
+    def __init__(self, rc):
+        self.rc = rc
+
+
 class Client:
     def __init__(self, *a, **kw):
         self.published = []
+        self.rc = 0
 
     def username_pw_set(self, *a):
         pass
@@ -30,6 +38,7 @@ class Client:
 
     def publish(self, topic, payload, qos=0, retain=False):
         self.published.append((topic, payload))
+        return Info(self.rc)
 
 
 client_mod.Client = Client
@@ -563,3 +572,16 @@ assert secrets.mqtt_host == "broker.local", repr(secrets.mqtt_host)
 os.environ.update({"MQTT_PASS": "x", "MQTT_HOST": "core-mosquitto"})
 os.environ.pop("HTTP_USERNAME"), os.environ.pop("HTTP_PASSWORD")
 print("SECRETS OK")
+
+# --- publish failures -----------------------------------------------------
+# paho drops messages while disconnected and only says so through the return
+# code, so a failed publish has to be counted rather than ignored.
+b.publish_errors = 0
+b.client.rc = 4                       # MQTT_ERR_NO_CONN
+for _ in range(3):
+    b.publish("aiscatcher/test", "x", qos=1, retain=True)
+assert b.publish_errors == 3, b.publish_errors
+b.client.rc = 0
+b.publish("aiscatcher/test", "x", qos=1, retain=True)
+assert b.publish_errors == 0, b.publish_errors
+print("PUBLISH OK")

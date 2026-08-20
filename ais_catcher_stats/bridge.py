@@ -300,6 +300,7 @@ class Bridge:
         self.vessel_devices = {}  # mmsi -> the device block last announced
         self.ship_facts = {}     # mmsi -> last identity heard over the air
         self.vessel_seen = set()  # mmsi currently published as online
+        self.publish_errors = 0
         self.session = requests.Session()
         self.client = make_client("ais_catcher_stats_%s" % config.device_id)
         if config.mqtt_user:
@@ -330,6 +331,26 @@ class Bridge:
     def on_disconnect(self, client, userdata, rc, *_):
         if rc != 0:
             LOG.warning("Lost the MQTT connection (code %s), reconnecting", rc)
+
+    def publish(self, topic, payload, qos=0, retain=False):
+        """Publish, and say so when it did not work.
+
+        paho drops messages while the client is disconnected and reports it
+        only through the return code, so a bridge that never looked at it kept
+        logging successful polls while nothing reached the broker at all.
+        """
+        info = self.client.publish(topic, payload, qos=qos, retain=retain)
+        rc = getattr(info, "rc", 0)
+        if rc != 0:
+            self.publish_errors += 1
+            if self.publish_errors == 1 or self.publish_errors % 50 == 0:
+                LOG.warning("MQTT publish to %s failed (code %s), %d message(s) lost",
+                            topic, rc, self.publish_errors)
+        elif self.publish_errors:
+            LOG.info("MQTT publishing recovered, %d message(s) were lost",
+                     self.publish_errors)
+            self.publish_errors = 0
+        return info
 
     # --- HTTP -----------------------------------------------------------
 
@@ -543,7 +564,7 @@ class Bridge:
             ):
                 if value:
                     payload[field] = value
-            self.client.publish(self.discovery_topic(component, key),
+            self.publish(self.discovery_topic(component, key),
                                 json.dumps(payload), qos=1, retain=True)
             count += 1
         LOG.info("Published discovery for %d entities as device '%s'",
@@ -577,7 +598,7 @@ class Bridge:
             if attributes:
                 payload["json_attributes_topic"] = self.cfg.fleet_topic
                 payload["json_attributes_template"] = attributes
-            self.client.publish(self.discovery_topic("sensor", key),
+            self.publish(self.discovery_topic("sensor", key),
                                 json.dumps(payload), qos=1, retain=True)
         LOG.info("Published discovery for %d fleet entities", len(FLEET_SENSORS))
 
@@ -616,7 +637,7 @@ class Bridge:
         return payload
 
     def publish_fleet(self, ships):
-        self.client.publish(self.cfg.fleet_topic,
+        self.publish(self.cfg.fleet_topic,
                             json.dumps(self.fleet_payload(ships)),
                             qos=0, retain=True)
 
@@ -647,13 +668,13 @@ class Bridge:
                 "source_type": "gps",
                 "device": self.device or {"identifiers": [self.cfg.node]},
             }
-            self.client.publish(
+            self.publish(
                 self.discovery_topic("device_tracker", "station_location"),
                 json.dumps(tracker), qos=1, retain=True)
             self.station_published = True
             LOG.info("Published the receiver position %.4f, %.4f", lat, lon)
 
-        self.client.publish(self.cfg.station_topic,
+        self.publish(self.cfg.station_topic,
                             json.dumps({"latitude": lat, "longitude": lon,
                                         "gps_accuracy": 0}),
                             qos=0, retain=True)
@@ -755,7 +776,7 @@ class Bridge:
             "source_type": "gps",
             "device": device,
         }
-        self.client.publish(
+        self.publish(
             self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
             json.dumps(tracker), qos=1, retain=True)
 
@@ -777,7 +798,7 @@ class Bridge:
             for field, value in (("device_class", dclass), ("icon", icon)):
                 if value:
                     config[field] = value
-            self.client.publish(
+            self.publish(
                 self.cfg.vessel_discovery_topic("binary_sensor", mmsi, key),
                 json.dumps(config), qos=1, retain=True)
 
@@ -800,7 +821,7 @@ class Bridge:
                                  ("icon", icon)):
                 if value:
                     config[field] = value
-            self.client.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
+            self.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
                                 json.dumps(config), qos=1, retain=True)
 
         self.vessel_devices[mmsi] = device
@@ -838,7 +859,7 @@ class Bridge:
                 if mmsi in self.vessel_seen:
                     LOG.info("Vessel %d (%s) is out of range", mmsi, name)
                     self.vessel_seen.discard(mmsi)
-                self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
+                self.publish(self.cfg.vessel_topic(mmsi, "/status"),
                                     "offline", qos=1, retain=True)
                 continue
 
@@ -846,14 +867,14 @@ class Bridge:
                 LOG.info("Vessel %d (%s) is in range", mmsi, name)
                 self.vessel_seen.add(mmsi)
 
-            self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
+            self.publish(self.cfg.vessel_topic(mmsi, "/status"),
                                 "online", qos=1, retain=True)
-            self.client.publish(self.cfg.vessel_topic(mmsi),
+            self.publish(self.cfg.vessel_topic(mmsi),
                                 json.dumps(payload), qos=0, retain=True)
 
             lat, lon = payload.get("lat"), payload.get("lon")
             if lat is not None and lon is not None:
-                self.client.publish(
+                self.publish(
                     self.cfg.vessel_topic(mmsi, "/position"),
                     json.dumps({"latitude": lat, "longitude": lon,
                                 "gps_accuracy": 0}),
@@ -861,29 +882,29 @@ class Bridge:
 
     def remove_discovery(self):
         for component, key in [(c, k) for c, k, *_ in self.entities()]:
-            self.client.publish(self.discovery_topic(component, key), "", qos=1, retain=True)
+            self.publish(self.discovery_topic(component, key), "", qos=1, retain=True)
         for key, *_ in FLEET_SENSORS:
-            self.client.publish(self.discovery_topic("sensor", key), "", qos=1, retain=True)
-        self.client.publish(
+            self.publish(self.discovery_topic("sensor", key), "", qos=1, retain=True)
+        self.publish(
             self.discovery_topic("device_tracker", "station_location"),
             "", qos=1, retain=True)
-        self.client.publish(self.cfg.state_topic, "", qos=1, retain=True)
-        self.client.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
-        self.client.publish(self.cfg.station_topic, "", qos=1, retain=True)
+        self.publish(self.cfg.state_topic, "", qos=1, retain=True)
+        self.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
+        self.publish(self.cfg.station_topic, "", qos=1, retain=True)
 
         for mmsi in self.vessel_devices:
-            self.client.publish(
+            self.publish(
                 self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
                 "", qos=1, retain=True)
             for key, *_ in VESSEL_SENSORS:
-                self.client.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
+                self.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
                                     "", qos=1, retain=True)
             for key, *_ in VESSEL_BINARY_SENSORS:
-                self.client.publish(
+                self.publish(
                     self.cfg.vessel_discovery_topic("binary_sensor", mmsi, key),
                     "", qos=1, retain=True)
             for suffix in ("", "/position", "/status"):
-                self.client.publish(self.cfg.vessel_topic(mmsi, suffix), "",
+                self.publish(self.cfg.vessel_topic(mmsi, suffix), "",
                                     qos=1, retain=True)
         LOG.info("Removed discovery configuration from the broker")
 
@@ -914,8 +935,8 @@ class Bridge:
                     if self.cfg.fleet_sensors:
                         self.publish_fleet_discovery(stat)
                     self.discovered = True
-                self.client.publish(self.cfg.availability_topic, "online", qos=1, retain=True)
-                self.client.publish(self.cfg.state_topic, json.dumps(stat), qos=0, retain=True)
+                self.publish(self.cfg.availability_topic, "online", qos=1, retain=True)
+                self.publish(self.cfg.state_topic, json.dumps(stat), qos=0, retain=True)
                 if failures:
                     LOG.info("Recovered contact with %s", self.cfg.url)
                 failures = 0
@@ -935,7 +956,7 @@ class Bridge:
                         LOG.warning("Cannot read the vessel list: %s", err)
             except Exception as err:  # keep the bridge alive on any hiccup
                 failures += 1
-                self.client.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
+                self.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
                 if failures == 1 or failures % 10 == 0:
                     LOG.warning("Cannot read statistics from %s: %s (attempt %d)",
                                 self.cfg.url, err, failures)
@@ -945,9 +966,9 @@ class Bridge:
             self.remove_discovery()
         else:
             for mmsi in self.vessel_devices:
-                self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
+                self.publish(self.cfg.vessel_topic(mmsi, "/status"),
                                     "offline", qos=1, retain=True)
-        self.client.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
+        self.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
         time.sleep(0.5)
         self.client.loop_stop()
         self.client.disconnect()

@@ -22,6 +22,8 @@
 - Fix: a vessel whose name was known before its type stayed a generic "Vessel"
   forever. The device is re-announced whenever the type or the IMO arrives, and
   neither is unlearned when the ship goes out of range.
+- Messages the broker never received are logged instead of dropped silently,
+  so a half-working MQTT connection is visible in the add-on log.
 
 ## 0.4.0
 
