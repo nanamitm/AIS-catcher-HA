@@ -66,6 +66,7 @@ RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)
         echo "set \$ais_upstream \"${AIS_URL}\";"
         # With a variable nginx no longer appends the location's URI, so the
         # request path has to be passed on explicitly.
+        # shellcheck disable=SC2016  # these are nginx variables, not the shell's
         echo 'proxy_pass $ais_upstream$request_uri;'
     else
         echo "proxy_pass ${AIS_URL}/;"
