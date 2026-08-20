@@ -909,6 +909,35 @@ class Bridge:
                                     qos=1, retain=True)
         LOG.info("Removed discovery configuration from the broker")
 
+    def remove_legacy_vessel_discovery(self):
+        """Clear vessel discovery published before 0.4.1 namespaced the node id.
+
+        Up to 0.4.0 a vessel was announced under `aiscatcher_vessel_<mmsi>`,
+        without the device_id.  Those configs are retained, so the broker keeps
+        replaying them and Home Assistant keeps re-creating a second, identical
+        device next to the current one -- deleting it in the UI only brings it
+        back on the next restart.  Clearing the old topics once per start is
+        what actually removes it, and costs nothing when there is nothing there.
+        """
+        cleared = 0
+        for vessel in self.cfg.vessels:
+            mmsi = vessel["mmsi"]
+            node = "aiscatcher_vessel_%d" % mmsi
+            if node == self.cfg.vessel_node(mmsi):
+                continue
+            for component, keys in (
+                    ("device_tracker", ("location",)),
+                    ("sensor", [key for key, *_ in VESSEL_SENSORS]),
+                    ("binary_sensor", [key for key, *_ in VESSEL_BINARY_SENSORS])):
+                for key in keys:
+                    self.publish("%s/%s/%s/%s/config" % (
+                        self.cfg.discovery_prefix, component, node, key),
+                        "", qos=1, retain=True)
+                    cleared += 1
+        if cleared:
+            LOG.info("Swept %d discovery topics a pre-0.4.1 version would have left",
+                     cleared)
+
     # --- main loop ------------------------------------------------------
 
     def connect(self):
@@ -927,6 +956,7 @@ class Bridge:
     def run(self):
         if not self.connect():
             return 1
+        self.remove_legacy_vessel_discovery()
         failures = 0
         while not self.stop_event.is_set():
             try:

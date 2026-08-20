@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2
+
+- Fix: after the 0.4.1 rename, every tracked vessel appeared **twice**. The
+  discovery 0.4.0 published is retained, so the broker kept replaying it and
+  Home Assistant kept re-creating the old device — deleting it in the UI only
+  brought it back on the next restart. The old topics are now cleared on
+  start, which is what actually removes it.
+- The duplicate entities took the clean entity ids with them
+  (`sensor.<ship>_speed` vs `sensor.<ship>_speed_2`). Once the old device is
+  gone, rename the remaining `_2` entities under **Settings → Devices &
+  services → Entities**; Home Assistant keeps the id reserved until then.
+
 ## 0.4.1
 
 - Fix: vessel devices, entities and discovery topics now carry the `device_id`

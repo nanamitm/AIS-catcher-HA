@@ -219,6 +219,12 @@ UI proxy` means nginx did not come up; anything else means the receiver's web
 server did not answer, and `curl <url>` from an SSH add-on will say why. The
 statistics are unaffected either way.
 
+**A vessel appears twice, or its entities end in `_2`** — from the 0.4.1
+rename. 0.4.2 clears the old discovery on start, so the duplicate device goes
+away by itself; restart the add-on once if it is still there. Home Assistant
+keeps the freed entity ids reserved, so rename the `_2` entities by hand under
+**Settings → Devices & services → Entities** to get them back.
+
 **Entities did not appear** — the discovery messages are sent once at startup;
 restart the add-on after changing `device_name` or `device_id`. Renaming
 `device_id` creates a *new* device, the old one has to be deleted manually.

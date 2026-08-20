@@ -370,6 +370,34 @@ else:
 
 print("VESSELS OK")
 
+# --- discovery left behind by a pre-0.4.1 version -------------------------
+# Those topics are retained, so Home Assistant re-creates the old device on
+# every restart until they are cleared.
+
+legacy = bridge.Bridge(cfg)
+legacy.remove_legacy_vessel_discovery()
+swept = dict(legacy.client.published)
+expected = 4 * (len(bridge.VESSEL_SENSORS) + len(bridge.VESSEL_BINARY_SENSORS) + 1)
+assert len(swept) == expected, (len(swept), expected)
+assert all(payload == "" for payload in swept.values()), "must clear, not publish"
+assert "homeassistant/sensor/aiscatcher_vessel_219025528/speed/config" in swept
+assert "homeassistant/device_tracker/aiscatcher_vessel_219025528/location/config" in swept
+assert "homeassistant/binary_sensor/aiscatcher_vessel_219025528/in_range/config" in swept
+
+# the current topics carry the device_id and must not be cleared
+current = cfg.vessel_discovery_topic("sensor", 219025528, "speed")
+assert "aiscatcher_aiscatcher_vessel_219025528" in current, current
+assert current not in swept, "swept the discovery it had just published"
+
+# nothing to do when there is no vessel configured
+configured_vessels = os.environ["VESSELS"]
+os.environ["VESSELS"] = "[]"
+quiet = bridge.Bridge(bridge.Config())
+quiet.remove_legacy_vessel_discovery()
+assert quiet.client.published == []
+os.environ["VESSELS"] = configured_vessels
+print("LEGACY SWEEP OK")
+
 # --- everything in range --------------------------------------------------
 
 os.environ["NEARBY_RADIUS"] = "2"
