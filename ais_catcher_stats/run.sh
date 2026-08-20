@@ -18,8 +18,10 @@ export NEARBY_RADIUS="$(bashio::config 'nearby_radius' '5')"
 # return it: for a list option it prints the *elements*, so a single vessel
 # arrives as a bare object and jq counts its keys instead of the entries.
 # The raw options file keeps the array intact.
-VESSELS="$(jq -c '.vessels // []' /data/options.json 2>/dev/null)"
-if [ -z "${VESSELS}" ]; then
+# `|| true` keeps `set -e` from killing the script when jq or the options file
+# is not there -- the point of the check below is to fall back to an empty list.
+VESSELS="$(jq -c '.vessels // []' /data/options.json 2>/dev/null || true)"
+if [ -z "${VESSELS}" ] || [ "${VESSELS}" = "null" ]; then
     VESSELS="[]"
 fi
 export VESSELS
@@ -82,5 +84,5 @@ else
 fi
 
 bashio::log.info "Polling ${AIS_URL} every ${SCAN_INTERVAL}s -> MQTT ${MQTT_HOST}:${MQTT_PORT}"
-bashio::log.info "Tracking $(echo "${VESSELS}" | jq -r 'length') vessel(s)"
+bashio::log.info "Tracking $(echo "${VESSELS}" | jq -r 'length' 2>/dev/null || echo '?') vessel(s)"
 exec python3 /bridge.py
