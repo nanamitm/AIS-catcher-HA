@@ -300,7 +300,17 @@ class Bridge:
         self.vessel_devices = {}  # mmsi -> the device block last announced
         self.ship_facts = {}     # mmsi -> last identity heard over the air
         self.vessel_seen = set()  # mmsi currently published as online
+        # Every mmsi announced during this run.  vessel_devices is emptied on a
+        # reconnect to force a re-announce, so it cannot double as the record of
+        # what has to be cleaned up when the add-on stops.
+        self.announced_vessels = set()
         self.publish_errors = 0
+        self.connack_seen = False
+        self.reconnected = threading.Event()
+        # Which vessels this add-on has published for, across restarts.  A
+        # vessel dropped from the options has to be cleared from the broker, and
+        # nothing else remembers it once the option is gone.
+        self.known_path = "/data/known_vessels.json"
         self.session = requests.Session()
         self.client = make_client("ais_catcher_stats_%s" % config.device_id)
         if config.mqtt_user:
@@ -312,18 +322,34 @@ class Bridge:
     # --- MQTT -----------------------------------------------------------
 
     def on_connect(self, client, userdata, flags, rc, *_):
-        """Announce everything again after a reconnect.
+        """Flag a reconnect so the main loop announces everything again.
 
         paho reconnects on its own, but a broker without persistence loses
         every retained message while it is down -- the discovery config
         included.  Without forgetting what was announced the device would stay
         missing from Home Assistant until the add-on is restarted by hand.
+
+        This runs on paho's network thread, so it only sets an event: the state
+        it would otherwise reset is read and written by the main loop, and a
+        dict cleared underneath an iteration crashes the shutdown path.
         """
         if rc != 0:
             LOG.error("MQTT broker refused the connection (code %s)", rc)
             return
-        if self.discovered or self.vessel_devices:
-            LOG.info("Reconnected to MQTT, re-publishing discovery")
+        if self.connack_seen:
+            self.reconnected.set()
+            return
+        # `connect()` returns once the socket is up, while this arrives on the
+        # network thread -- often after the first poll has already published.
+        # Treating that as a reconnect re-announced everything on every start.
+        self.connack_seen = True
+
+    def apply_reconnect(self):
+        """Forget what was announced, on the thread that owns that state."""
+        if not self.reconnected.is_set():
+            return
+        self.reconnected.clear()
+        LOG.info("Reconnected to MQTT, re-publishing discovery")
         self.discovered = False
         self.station_published = False
         self.vessel_devices.clear()
@@ -342,6 +368,12 @@ class Bridge:
         """
         info = self.client.publish(topic, payload, qos=qos, retain=retain)
         rc = getattr(info, "rc", 0)
+        if rc != 0 and qos > 0:
+            # paho keeps a QoS>0 message and sends it once the connection is
+            # back, so this is a delay, not a loss.  Reporting it as one said
+            # the opposite of the truth for every discovery message.
+            LOG.debug("MQTT publish to %s deferred (code %s)", topic, rc)
+            return info
         if rc != 0:
             self.publish_errors += 1
             if self.publish_errors == 1 or self.publish_errors % 50 == 0:
@@ -826,6 +858,7 @@ class Bridge:
                                 json.dumps(config), qos=1, retain=True)
 
         self.vessel_devices[mmsi] = device
+        self.announced_vessels.add(mmsi)
         LOG.info("Published discovery for vessel %d as '%s' (%s)",
                  mmsi, name, device["model"])
 
@@ -893,50 +926,81 @@ class Bridge:
         self.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
         self.publish(self.cfg.station_topic, "", qos=1, retain=True)
 
-        for mmsi in self.vessel_devices:
-            self.publish(
-                self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
-                "", qos=1, retain=True)
-            for key, *_ in VESSEL_SENSORS:
-                self.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
-                                    "", qos=1, retain=True)
-            for key, *_ in VESSEL_BINARY_SENSORS:
-                self.publish(
-                    self.cfg.vessel_discovery_topic("binary_sensor", mmsi, key),
-                    "", qos=1, retain=True)
-            for suffix in ("", "/position", "/status"):
-                self.publish(self.cfg.vessel_topic(mmsi, suffix), "",
-                                    qos=1, retain=True)
+        for mmsi in sorted(self.announced_vessels):
+            self.clear_vessel(mmsi)
         LOG.info("Removed discovery configuration from the broker")
 
-    def remove_legacy_vessel_discovery(self):
+    def clear_vessel(self, mmsi):
+        """Clear everything retained for one vessel, discovery and state."""
+        self.publish(
+            self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
+            "", qos=1, retain=True)
+        for key, *_ in VESSEL_SENSORS:
+            self.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
+                         "", qos=1, retain=True)
+        for key, *_ in VESSEL_BINARY_SENSORS:
+            self.publish(self.cfg.vessel_discovery_topic("binary_sensor", mmsi, key),
+                         "", qos=1, retain=True)
+        for suffix in ("", "/position", "/status"):
+            self.publish(self.cfg.vessel_topic(mmsi, suffix), "", qos=1, retain=True)
+
+    def clear_legacy_vessel(self, mmsi):
         """Clear vessel discovery published before 0.4.1 namespaced the node id.
 
         Up to 0.4.0 a vessel was announced under `aiscatcher_vessel_<mmsi>`,
         without the device_id.  Those configs are retained, so the broker keeps
         replaying them and Home Assistant keeps re-creating a second, identical
         device next to the current one -- deleting it in the UI only brings it
-        back on the next restart.  Clearing the old topics once per start is
-        what actually removes it, and costs nothing when there is nothing there.
+        back on the next restart.  Clearing the old topics is what actually
+        removes it, and costs nothing when there is nothing there.
         """
-        cleared = 0
-        for vessel in self.cfg.vessels:
-            mmsi = vessel["mmsi"]
-            node = "aiscatcher_vessel_%d" % mmsi
-            if node == self.cfg.vessel_node(mmsi):
-                continue
-            for component, keys in (
-                    ("device_tracker", ("location",)),
-                    ("sensor", [key for key, *_ in VESSEL_SENSORS]),
-                    ("binary_sensor", [key for key, *_ in VESSEL_BINARY_SENSORS])):
-                for key in keys:
-                    self.publish("%s/%s/%s/%s/config" % (
-                        self.cfg.discovery_prefix, component, node, key),
-                        "", qos=1, retain=True)
-                    cleared += 1
-        if cleared:
-            LOG.info("Swept %d discovery topics a pre-0.4.1 version would have left",
-                     cleared)
+        node = "aiscatcher_vessel_%d" % mmsi
+        for component, keys in (
+                ("device_tracker", ("location",)),
+                ("sensor", [key for key, *_ in VESSEL_SENSORS]),
+                ("binary_sensor", [key for key, *_ in VESSEL_BINARY_SENSORS])):
+            for key in keys:
+                self.publish("%s/%s/%s/%s/config" % (
+                    self.cfg.discovery_prefix, component, node, key),
+                    "", qos=1, retain=True)
+
+    def load_known_vessels(self):
+        try:
+            with open(self.known_path) as handle:
+                return {int(mmsi) for mmsi in json.load(handle)}
+        except (OSError, ValueError, TypeError):
+            return set()
+
+    def save_known_vessels(self, mmsis):
+        try:
+            with open(self.known_path, "w") as handle:
+                json.dump(sorted(mmsis), handle)
+        except OSError as err:
+            LOG.warning("Cannot remember which vessels are tracked (%s)", err)
+
+    def retire_vessels(self):
+        """Take vessels that are no longer tracked out of Home Assistant.
+
+        Discovery is retained, so dropping a vessel from the options is not
+        enough on its own: without clearing its topics the device stays forever,
+        stuck offline.  The MMSIs published for are remembered in /data, because
+        once the option is gone nothing else knows the vessel ever existed.
+        """
+        configured = {vessel["mmsi"] for vessel in self.cfg.vessels}
+        known = self.load_known_vessels()
+
+        for mmsi in sorted(known - configured):
+            self.clear_vessel(mmsi)
+            LOG.info("Vessel %d is no longer tracked, removed from Home Assistant",
+                     mmsi)
+        # A vessel dropped before this version could still have pre-0.4.1
+        # topics of its own, so sweep those for everything ever seen.
+        for mmsi in sorted(known | configured):
+            self.clear_legacy_vessel(mmsi)
+        if known | configured:
+            LOG.info("Swept the discovery topics a pre-0.4.1 version would have "
+                     "left for %d vessel(s)", len(known | configured))
+        self.save_known_vessels(configured)
 
     # --- main loop ------------------------------------------------------
 
@@ -956,9 +1020,10 @@ class Bridge:
     def run(self):
         if not self.connect():
             return 1
-        self.remove_legacy_vessel_discovery()
+        self.retire_vessels()
         failures = 0
         while not self.stop_event.is_set():
+            self.apply_reconnect()
             try:
                 stat = self.normalise(self.fetch())
                 if not self.discovered:
@@ -996,7 +1061,7 @@ class Bridge:
         if self.cfg.remove_on_stop:
             self.remove_discovery()
         else:
-            for mmsi in self.vessel_devices:
+            for mmsi in sorted(self.announced_vessels):
                 self.publish(self.cfg.vessel_topic(mmsi, "/status"),
                                     "offline", qos=1, retain=True)
         self.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)

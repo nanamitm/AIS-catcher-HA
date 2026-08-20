@@ -374,11 +374,16 @@ print("VESSELS OK")
 # Those topics are retained, so Home Assistant re-creates the old device on
 # every restart until they are cleared.
 
+import tempfile  # noqa: E402
+
+known_file = os.path.join(tempfile.mkdtemp(), "known_vessels.json")
+
 legacy = bridge.Bridge(cfg)
-legacy.remove_legacy_vessel_discovery()
+legacy.known_path = known_file
+legacy.retire_vessels()
 swept = dict(legacy.client.published)
-expected = 4 * (len(bridge.VESSEL_SENSORS) + len(bridge.VESSEL_BINARY_SENSORS) + 1)
-assert len(swept) == expected, (len(swept), expected)
+per_vessel = len(bridge.VESSEL_SENSORS) + len(bridge.VESSEL_BINARY_SENSORS) + 1
+assert len(swept) == 4 * per_vessel, (len(swept), 4 * per_vessel)
 assert all(payload == "" for payload in swept.values()), "must clear, not publish"
 assert "homeassistant/sensor/aiscatcher_vessel_219025528/speed/config" in swept
 assert "homeassistant/device_tracker/aiscatcher_vessel_219025528/location/config" in swept
@@ -389,12 +394,37 @@ current = cfg.vessel_discovery_topic("sensor", 219025528, "speed")
 assert "aiscatcher_aiscatcher_vessel_219025528" in current, current
 assert current not in swept, "swept the discovery it had just published"
 
-# nothing to do when there is no vessel configured
+# the four configured vessels are now remembered
+assert legacy.load_known_vessels() == {219025528, 431000123, 999000111, 111222333}
+
+# drop one from the options: its discovery has to be cleared, or the device
+# stays in Home Assistant forever, stuck offline
 configured_vessels = os.environ["VESSELS"]
+os.environ["VESSELS"] = json.dumps([{"mmsi": 219025528}])
+dropped = bridge.Bridge(bridge.Config())
+dropped.known_path = known_file
+dropped.retire_vessels()
+cleared = dict(dropped.client.published)
+gone = cfg.vessel_discovery_topic("sensor", 431000123, "speed")
+assert gone in cleared and cleared[gone] == "", "a dropped vessel was left behind"
+assert "aiscatcher/aiscatcher/vessel/431000123/status" in cleared
+kept = cfg.vessel_discovery_topic("sensor", 219025528, "speed")
+assert kept not in cleared, "cleared a vessel that is still configured"
+# ... and it is forgotten, so the next start does not clear it again
+assert dropped.load_known_vessels() == {219025528}
+
+# a vessel dropped before this version still gets its pre-0.4.1 topics swept
+assert "homeassistant/sensor/aiscatcher_vessel_431000123/speed/config" in cleared
+
+# nothing to do when there is no vessel configured and none was ever seen
 os.environ["VESSELS"] = "[]"
 quiet = bridge.Bridge(bridge.Config())
-quiet.remove_legacy_vessel_discovery()
+quiet.known_path = os.path.join(tempfile.mkdtemp(), "none.json")
+quiet.retire_vessels()
 assert quiet.client.published == []
+# an unwritable path must not take the add-on down with it
+quiet.known_path = "/nonexistent/dir/known.json"
+quiet.retire_vessels()
 os.environ["VESSELS"] = configured_vessels
 print("LEGACY SWEEP OK")
 
@@ -521,9 +551,28 @@ print("NAME PERSISTENCE OK")
 # so a reconnect has to announce everything again.
 v.client.published.clear()
 v.station_published = True
+
+# The CONNACK for the *first* connection lands on paho's thread, often after
+# the first poll has already published: treating it as a reconnect re-announced
+# everything on every start.
 v.on_connect(v.client, None, {}, 0)
+assert not v.reconnected.is_set(), "the first connection was read as a reconnect"
+assert v.vessel_devices, "the initial CONNACK wiped what was announced"
+
+# A real reconnect only raises a flag; the state it resets belongs to the main
+# thread, which clears a dict the shutdown path may be iterating.
+v.on_connect(v.client, None, {}, 0)
+assert v.reconnected.is_set()
+assert v.vessel_devices, "state was changed from paho's thread"
+v.apply_reconnect()
+assert not v.reconnected.is_set()
 assert v.vessel_devices == {}, v.vessel_devices
 assert v.station_published is False, "the receiver position was not re-announced"
+
+# what has to be cleaned up on stop is remembered separately, so a reconnect
+# shortly before the add-on stops does not skip the cleanup
+assert v.announced_vessels == {219025528, 431000123, 999000111, 111222333}
+
 v.publish_vessels(json.loads(json.dumps(SHIPS)))
 reannounced = [t for t, _ in v.client.published if t.endswith("/config")]
 assert len(reannounced) == 4 * (len(bridge.VESSEL_SENSORS)
@@ -532,13 +581,26 @@ assert len(reannounced) == 4 * (len(bridge.VESSEL_SENSORS)
 assert v.vessel_devices[431000123]["name"] == "KAIYO MARU", v.vessel_devices[431000123]
 assert v.vessel_devices[999000111]["model"] == "Tug", v.vessel_devices[999000111]
 
+# a reconnect that happens while the add-on is stopping must still leave a
+# complete cleanup behind
+v.client.published.clear()
+v.apply_reconnect()                      # nothing flagged, nothing to do
+v.remove_discovery()
+removed = dict(v.client.published)
+for mmsi in (219025528, 431000123, 999000111, 111222333):
+    topic = cfg.vessel_discovery_topic("sensor", mmsi, "speed")
+    assert removed.get(topic) == "", "vessel %d was not cleaned up" % mmsi
+
 b.client.published.clear()
 b.discovered = True
+b.connack_seen = True                    # past the first connection
 b.on_connect(b.client, None, {}, 0)
+b.apply_reconnect()
 assert b.discovered is False
 # a refused connection must not wipe the state, there is nothing to re-announce
 b.discovered = True
 b.on_connect(b.client, None, {}, 5)
+b.apply_reconnect()
 assert b.discovered is True
 print("RECONNECT OK")
 
@@ -605,14 +667,23 @@ os.environ.pop("HTTP_USERNAME"), os.environ.pop("HTTP_PASSWORD")
 print("SECRETS OK")
 
 # --- publish failures -----------------------------------------------------
-# paho drops messages while disconnected and only says so through the return
-# code, so a failed publish has to be counted rather than ignored.
+# paho drops a QoS 0 message while disconnected and only says so through the
+# return code, so that has to be counted rather than ignored.
 b.publish_errors = 0
 b.client.rc = 4                       # MQTT_ERR_NO_CONN
 for _ in range(3):
-    b.publish("aiscatcher/test", "x", qos=1, retain=True)
+    b.publish("aiscatcher/test", "x", qos=0, retain=True)
 assert b.publish_errors == 3, b.publish_errors
 b.client.rc = 0
-b.publish("aiscatcher/test", "x", qos=1, retain=True)
+b.publish("aiscatcher/test", "x", qos=0, retain=True)
 assert b.publish_errors == 0, b.publish_errors
+
+# A QoS>0 message is kept by paho and sent on the next connection, so the same
+# return code means "delayed", not "lost".  Counting it reported every
+# discovery message as lost when it had in fact been delivered.
+b.client.rc = 4
+for _ in range(5):
+    b.publish("aiscatcher/test", "x", qos=1, retain=True)
+assert b.publish_errors == 0, b.publish_errors
+b.client.rc = 0
 print("PUBLISH OK")
