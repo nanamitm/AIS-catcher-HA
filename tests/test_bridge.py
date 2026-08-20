@@ -108,6 +108,11 @@ assert norm["coverage"]["reach"][2] == 11.2   # max of A 11.2 and B 3.0
 assert bridge.Bridge.coverage({})["coverage_sectors"] == 0
 assert bridge.Bridge.coverage({"radar_a": "nonsense"})["coverage"]["reach"] == []
 
+# normalise() works on a copy, the caller's payload is left alone
+raw = json.loads(json.dumps(STAT))
+b.normalise(raw)
+assert raw == STAT, "normalise() modified its input"
+
 # old-style human readable received string
 assert bridge.parse_size("117.7 MB") == int(117.7 * 1024 ** 2)
 assert bridge.parse_size(12345) == 12345

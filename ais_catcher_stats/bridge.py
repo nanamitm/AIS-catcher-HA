@@ -381,7 +381,8 @@ class Bridge:
         out = dict(stat)
 
         for period in ("last_minute", "last_hour", "last_day", "total", "session"):
-            bucket = as_dict(stat.get(period))
+            # a copy: normalise() must not write into the response it was given
+            bucket = dict(as_dict(stat.get(period)))
             bucket["count"] = bucket.get("count", 0) or 0
             bucket["vessels"] = bucket.get("vessels", 0) or 0
             bucket["dist"] = bucket.get("dist", 0) or 0
