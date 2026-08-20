@@ -106,13 +106,25 @@ class Config:
         self.fleet_topic = "%s/fleet" % self.base_topic
         self.station_topic = "%s/position" % self.base_topic
 
+        # Discovery node id of the receiver.  Everything this add-on publishes
+        # is namespaced with it, so two instances watching the same vessel do
+        # not fight over one discovery topic or one unique_id.
+        self.node = "aiscatcher_%s" % self.device_id
+
     @property
     def needs_ships(self):
         """Whether ships.json has to be fetched at all."""
         return bool(self.vessels) or self.fleet_sensors
 
+    def vessel_node(self, mmsi):
+        return "%s_vessel_%d" % (self.node, mmsi)
+
     def vessel_topic(self, mmsi, suffix=""):
         return "%s/vessel/%d%s" % (self.base_topic, mmsi, suffix)
+
+    def vessel_discovery_topic(self, component, mmsi, key):
+        return "%s/%s/%s/%s/config" % (
+            self.discovery_prefix, component, self.vessel_node(mmsi), key)
 
 
 def load_json_entries(raw):
@@ -427,7 +439,7 @@ class Bridge:
             return ""
 
         device = {
-            "identifiers": ["aiscatcher_%s" % self.cfg.device_id],
+            "identifiers": [self.cfg.node],
             "name": self.cfg.device_name,
             "manufacturer": "jvde-github",
             "model": text("product", "model", "device_label") or "AIS-catcher",
@@ -451,8 +463,8 @@ class Bridge:
             yield "binary_sensor", key, name, tmpl, None, dclass, None, ecat, None
 
     def discovery_topic(self, component, key):
-        return "%s/%s/aiscatcher_%s/%s/config" % (
-            self.cfg.discovery_prefix, component, self.cfg.device_id, key)
+        return "%s/%s/%s/%s/config" % (
+            self.cfg.discovery_prefix, component, self.cfg.node, key)
 
     def publish_discovery(self, stat):
         device = self.device = self.device_block(stat)
@@ -460,7 +472,7 @@ class Bridge:
         for component, key, name, tmpl, unit, dclass, sclass, ecat, icon in self.entities():
             payload = {
                 "name": name,
-                "unique_id": "aiscatcher_%s_%s" % (self.cfg.device_id, key),
+                "unique_id": "%s_%s" % (self.cfg.node, key),
                 "object_id": "%s_%s" % (self.cfg.device_id, key),
                 "state_topic": self.cfg.state_topic,
                 "value_template": tmpl,
@@ -499,7 +511,7 @@ class Bridge:
         for key, name, tmpl, unit, dclass, sclass, ecat, icon in FLEET_SENSORS:
             payload = {
                 "name": name,
-                "unique_id": "aiscatcher_%s_%s" % (self.cfg.device_id, key),
+                "unique_id": "%s_%s" % (self.cfg.node, key),
                 "object_id": "%s_%s" % (self.cfg.device_id, key),
                 "state_topic": self.cfg.fleet_topic,
                 "value_template": tmpl,
@@ -581,19 +593,17 @@ class Bridge:
         if not self.station_published:
             tracker = {
                 "name": "Antenna location",
-                "unique_id": "aiscatcher_%s_station_location" % self.cfg.device_id,
+                "unique_id": "%s_station_location" % self.cfg.node,
                 "object_id": "%s_station_location" % self.cfg.device_id,
                 "json_attributes_topic": self.cfg.station_topic,
                 "availability_topic": self.cfg.availability_topic,
                 "payload_available": "online",
                 "payload_not_available": "offline",
                 "source_type": "gps",
-                "device": self.device or {
-                    "identifiers": ["aiscatcher_%s" % self.cfg.device_id]},
+                "device": self.device or {"identifiers": [self.cfg.node]},
             }
             self.client.publish(
-                "%s/device_tracker/aiscatcher_%s/station_location/config" % (
-                    self.cfg.discovery_prefix, self.cfg.device_id),
+                self.discovery_topic("device_tracker", "station_location"),
                 json.dumps(tracker), qos=1, retain=True)
             self.station_published = True
             LOG.info("Published the receiver position %.4f, %.4f", lat, lon)
@@ -665,11 +675,11 @@ class Bridge:
 
     def vessel_device(self, mmsi, name, payload):
         device = {
-            "identifiers": ["aiscatcher_vessel_%d" % mmsi],
+            "identifiers": [self.cfg.vessel_node(mmsi)],
             "name": name,
             "manufacturer": "AIS",
             "model": payload.get("shiptype_text") or "Vessel",
-            "via_device": "aiscatcher_%s" % self.cfg.device_id,
+            "via_device": self.cfg.node,
         }
         if payload.get("imo"):
             device["serial_number"] = "IMO %s" % payload["imo"]
@@ -679,13 +689,12 @@ class Bridge:
         device = self.vessel_device(mmsi, name, payload)
         state_topic = self.cfg.vessel_topic(mmsi)
         availability = self.cfg.vessel_topic(mmsi, "/status")
-        prefix = "%s/%%s/aiscatcher_vessel_%d/%%s/config" % (self.cfg.discovery_prefix, mmsi)
 
         # The tracker takes its position from a dedicated attributes topic, so
         # Home Assistant can place it on the map without a state template.
         tracker = {
             "name": "Location",
-            "unique_id": "aiscatcher_vessel_%d_location" % mmsi,
+            "unique_id": "%s_location" % self.cfg.vessel_node(mmsi),
             "object_id": "%s_%d_location" % (self.cfg.device_id, mmsi),
             "json_attributes_topic": self.cfg.vessel_topic(mmsi, "/position"),
             "availability_topic": availability,
@@ -694,13 +703,14 @@ class Bridge:
             "source_type": "gps",
             "device": device,
         }
-        self.client.publish(prefix % ("device_tracker", "location"),
-                            json.dumps(tracker), qos=1, retain=True)
+        self.client.publish(
+            self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
+            json.dumps(tracker), qos=1, retain=True)
 
         for key, ename, dclass, icon in VESSEL_BINARY_SENSORS:
             config = {
                 "name": ename,
-                "unique_id": "aiscatcher_vessel_%d_%s" % (mmsi, key),
+                "unique_id": "%s_%s" % (self.cfg.vessel_node(mmsi), key),
                 "object_id": "%s_%d_%s" % (self.cfg.device_id, mmsi, key),
                 "state_topic": availability,
                 "payload_on": "online",
@@ -715,13 +725,14 @@ class Bridge:
             for field, value in (("device_class", dclass), ("icon", icon)):
                 if value:
                     config[field] = value
-            self.client.publish(prefix % ("binary_sensor", key), json.dumps(config),
-                                qos=1, retain=True)
+            self.client.publish(
+                self.cfg.vessel_discovery_topic("binary_sensor", mmsi, key),
+                json.dumps(config), qos=1, retain=True)
 
         for key, ename, tmpl, unit, dclass, sclass, ecat, icon in VESSEL_SENSORS:
             config = {
                 "name": ename,
-                "unique_id": "aiscatcher_vessel_%d_%s" % (mmsi, key),
+                "unique_id": "%s_%s" % (self.cfg.vessel_node(mmsi), key),
                 "object_id": "%s_%d_%s" % (self.cfg.device_id, mmsi, key),
                 "state_topic": state_topic,
                 "value_template": tmpl,
@@ -737,8 +748,8 @@ class Bridge:
                                  ("icon", icon)):
                 if value:
                     config[field] = value
-            self.client.publish(prefix % ("sensor", key), json.dumps(config),
-                                qos=1, retain=True)
+            self.client.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
+                                json.dumps(config), qos=1, retain=True)
 
         self.vessel_names[mmsi] = name
         LOG.info("Published discovery for vessel %d as '%s'", mmsi, name)
@@ -796,21 +807,23 @@ class Bridge:
         for key, *_ in FLEET_SENSORS:
             self.client.publish(self.discovery_topic("sensor", key), "", qos=1, retain=True)
         self.client.publish(
-            "%s/device_tracker/aiscatcher_%s/station_location/config" % (
-                self.cfg.discovery_prefix, self.cfg.device_id), "", qos=1, retain=True)
+            self.discovery_topic("device_tracker", "station_location"),
+            "", qos=1, retain=True)
         self.client.publish(self.cfg.state_topic, "", qos=1, retain=True)
         self.client.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
         self.client.publish(self.cfg.station_topic, "", qos=1, retain=True)
 
         for mmsi in self.vessel_names:
-            prefix = "%s/%%s/aiscatcher_vessel_%d/%%s/config" % (
-                self.cfg.discovery_prefix, mmsi)
-            self.client.publish(prefix % ("device_tracker", "location"), "",
-                                qos=1, retain=True)
+            self.client.publish(
+                self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
+                "", qos=1, retain=True)
             for key, *_ in VESSEL_SENSORS:
-                self.client.publish(prefix % ("sensor", key), "", qos=1, retain=True)
+                self.client.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
+                                    "", qos=1, retain=True)
             for key, *_ in VESSEL_BINARY_SENSORS:
-                self.client.publish(prefix % ("binary_sensor", key), "", qos=1, retain=True)
+                self.client.publish(
+                    self.cfg.vessel_discovery_topic("binary_sensor", mmsi, key),
+                    "", qos=1, retain=True)
             for suffix in ("", "/position", "/status"):
                 self.client.publish(self.cfg.vessel_topic(mmsi, suffix), "",
                                     qos=1, retain=True)

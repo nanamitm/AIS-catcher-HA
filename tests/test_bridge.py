@@ -229,7 +229,7 @@ v.publish_vessels(json.loads(json.dumps(SHIPS)))
 
 published = dict(v.client.published)
 vessel_configs = [(t, json.loads(p)) for t, p in v.client.published
-                  if t.endswith("/config") and "aiscatcher_vessel_" in t]
+                  if t.endswith("/config") and "_vessel_" in t]
 print("vessel entities:", len(vessel_configs))
 assert len(vessel_configs) == 4 * (
     len(bridge.VESSEL_SENSORS) + len(bridge.VESSEL_BINARY_SENSORS) + 1)
@@ -254,9 +254,15 @@ for tracker in trackers:
 
 names = {c["device"]["identifiers"][0]: c["device"]["name"] for _, c in vessel_configs}
 print("names:", names)
-assert names["aiscatcher_vessel_219025528"] == "DBB Asterix"   # configured name wins
-assert names["aiscatcher_vessel_431000123"] == "MMSI 431000123"  # no name known yet
-assert names["aiscatcher_vessel_111222333"] == "Never heard"
+assert names["aiscatcher_aiscatcher_vessel_219025528"] == "DBB Asterix"   # configured name wins
+assert names["aiscatcher_aiscatcher_vessel_431000123"] == "MMSI 431000123"  # no name known yet
+assert names["aiscatcher_aiscatcher_vessel_111222333"] == "Never heard"
+
+# vessel ids carry the device_id, so a second instance with another device_id
+# cannot overwrite this one's discovery or collide on unique_id
+for topic, c in vessel_configs:
+    assert "/aiscatcher_aiscatcher_vessel_" in topic, topic
+    assert c["unique_id"].startswith("aiscatcher_aiscatcher_vessel_"), c["unique_id"]
 
 # device metadata comes from the ship report
 ferry = [c for _, c in vessel_configs if c["device"]["identifiers"][0].endswith("219025528")][0]

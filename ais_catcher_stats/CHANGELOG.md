@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+- Fix: vessel devices, entities and discovery topics now carry the `device_id`
+  (`aiscatcher_<device_id>_vessel_<mmsi>`). Two instances of the add-on with a
+  different `device_id` tracking the same MMSI used to overwrite each other's
+  discovery and collide on `unique_id`. Existing vessel devices are re-created
+  under the new identifier on the first start; delete the old ones from the
+  MQTT integration if they linger.
+
 ## 0.4.0
 
 - The AIS-catcher map is now in the Home Assistant sidebar, through ingress.
