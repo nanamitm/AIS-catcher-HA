@@ -19,6 +19,9 @@
   one. It now declares `mqtt:want`.
 - Fix: leading or trailing spaces were stripped from the MQTT and HTTP
   passwords, which turned a valid password into an authentication failure.
+- Fix: a vessel whose name was known before its type stayed a generic "Vessel"
+  forever. The device is re-announced whenever the type or the IMO arrives, and
+  neither is unlearned when the ship goes out of range.
 
 ## 0.4.0
 

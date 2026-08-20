@@ -447,11 +447,30 @@ SPARSE = json.loads(json.dumps(SHIPS))
 SPARSE["ships"][1]["shipname"] = "KAIYO MARU"
 v.publish_vessels(SPARSE)
 count_after_name = len([t for t, _ in v.client.published if t.endswith("/config")])
-assert v.vessel_names[431000123] == "KAIYO MARU", v.vessel_names[431000123]
+assert v.vessel_devices[431000123]["name"] == "KAIYO MARU", v.vessel_devices[431000123]
+
+# the type and the IMO arrive later than the first position report, so the
+# device block has to be announced again when they do
+LATE = json.loads(json.dumps(SHIPS))
+LATE["ships"][2]["shiptype"] = 52       # 999000111 turns out to be a tug
+LATE["ships"][2]["imo"] = 1234567
+LATE["ships"][2]["last_signal"] = 5     # ... and is back in range
+v.publish_vessels(LATE)
+late = v.vessel_devices[999000111]
+assert late["model"] == "Tug", late
+assert late["serial_number"] == "IMO 1234567", late
+assert late["name"] == "Rare visitor", late    # the configured name still wins
+count_after_type = len([t for t, _ in v.client.published if t.endswith("/config")])
+assert count_after_type > count_after_name, "the new type was never announced"
+
+v.publish_vessels(LATE)                 # nothing new -> nothing republished
+assert len([t for t, _ in v.client.published
+            if t.endswith("/config")]) == count_after_type
 
 v.publish_vessels({"ships": []})          # every vessel out of range
-assert v.vessel_names[431000123] == "KAIYO MARU", "name downgraded when out of range"
-assert len([t for t, _ in v.client.published if t.endswith("/config")]) == count_after_name
+assert v.vessel_devices[431000123]["name"] == "KAIYO MARU", "name downgraded"
+assert v.vessel_devices[999000111]["model"] == "Tug", "type downgraded"
+assert len([t for t, _ in v.client.published if t.endswith("/config")]) == count_after_type
 assert dict(v.client.published)["aiscatcher/aiscatcher/vessel/219025528/status"] == "offline"
 print("NAME PERSISTENCE OK")
 
@@ -460,12 +479,13 @@ print("NAME PERSISTENCE OK")
 # so a reconnect has to announce everything again.
 v.client.published.clear()
 v.on_connect(v.client, None, {}, 0)
-assert v.vessel_names == {}, v.vessel_names
+assert v.vessel_devices == {}, v.vessel_devices
 v.publish_vessels(json.loads(json.dumps(SHIPS)))
 reannounced = [t for t, _ in v.client.published if t.endswith("/config")]
 assert len(reannounced) == 4 * (len(bridge.VESSEL_SENSORS) + 1), len(reannounced)
-# the name heard over the air survives the reconnect, it is not re-learned
-assert v.vessel_names[431000123] == "KAIYO MARU", v.vessel_names[431000123]
+# what was heard over the air survives the reconnect, it is not re-learned
+assert v.vessel_devices[431000123]["name"] == "KAIYO MARU", v.vessel_devices[431000123]
+assert v.vessel_devices[999000111]["model"] == "Tug", v.vessel_devices[999000111]
 
 b.client.published.clear()
 b.discovered = True

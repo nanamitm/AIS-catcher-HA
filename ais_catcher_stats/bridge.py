@@ -297,8 +297,8 @@ class Bridge:
         self.discovered = False
         self.device = None        # the device block, reused by later discoveries
         self.station_published = False
-        self.vessel_names = {}   # mmsi -> the name the discovery was published with
-        self.ship_names = {}     # mmsi -> last shipname heard over the air
+        self.vessel_devices = {}  # mmsi -> the device block last announced
+        self.ship_facts = {}     # mmsi -> last identity heard over the air
         self.vessel_seen = set()  # mmsi currently published as online
         self.session = requests.Session()
         self.client = make_client("ais_catcher_stats_%s" % config.device_id)
@@ -321,10 +321,10 @@ class Bridge:
         if rc != 0:
             LOG.error("MQTT broker refused the connection (code %s)", rc)
             return
-        if self.discovered or self.vessel_names:
+        if self.discovered or self.vessel_devices:
             LOG.info("Reconnected to MQTT, re-publishing discovery")
         self.discovered = False
-        self.vessel_names.clear()
+        self.vessel_devices.clear()
         self.vessel_seen.clear()
 
     def on_disconnect(self, client, userdata, rc, *_):
@@ -706,31 +706,38 @@ class Bridge:
             payload["last_signal_time"] = self.stable_time("vessel_%d" % mmsi, age)
         return payload
 
-    def vessel_name(self, mmsi, configured, payload):
-        """A name that never downgrades.
+    def remember(self, mmsi, payload):
+        """Keep what the vessel told us about itself, and never unlearn it.
 
-        A ship out of range reports nothing, so without remembering the last
-        known shipname the device would flip back to "MMSI ..." and republish
-        its discovery every time the vessel leaves and returns.
+        Identity travels in the static report, which arrives every few minutes
+        at best, and a ship out of range reports nothing at all.  Building the
+        device straight from the current payload would flip the name back to
+        "MMSI ..." and the type back to "Vessel", republishing the discovery
+        every time the vessel leaves and returns.
         """
-        if payload.get("shipname"):
-            self.ship_names[mmsi] = payload["shipname"]
-        return configured or self.ship_names.get(mmsi) or "MMSI %d" % mmsi
+        facts = self.ship_facts.setdefault(mmsi, {})
+        for key in ("shipname", "shiptype_text", "imo"):
+            if payload.get(key):
+                facts[key] = payload[key]
+        return facts
 
-    def vessel_device(self, mmsi, name, payload):
+    def vessel_name(self, mmsi, configured, facts):
+        return configured or facts.get("shipname") or "MMSI %d" % mmsi
+
+    def vessel_device(self, mmsi, name, facts):
         device = {
             "identifiers": [self.cfg.vessel_node(mmsi)],
             "name": name,
             "manufacturer": "AIS",
-            "model": payload.get("shiptype_text") or "Vessel",
+            "model": facts.get("shiptype_text") or "Vessel",
             "via_device": self.cfg.node,
         }
-        if payload.get("imo"):
-            device["serial_number"] = "IMO %s" % payload["imo"]
+        if facts.get("imo"):
+            device["serial_number"] = "IMO %s" % facts["imo"]
         return device
 
-    def publish_vessel_discovery(self, mmsi, name, payload):
-        device = self.vessel_device(mmsi, name, payload)
+    def publish_vessel_discovery(self, mmsi, device):
+        name = device["name"]
         state_topic = self.cfg.vessel_topic(mmsi)
         availability = self.cfg.vessel_topic(mmsi, "/status")
 
@@ -795,8 +802,9 @@ class Bridge:
             self.client.publish(self.cfg.vessel_discovery_topic("sensor", mmsi, key),
                                 json.dumps(config), qos=1, retain=True)
 
-        self.vessel_names[mmsi] = name
-        LOG.info("Published discovery for vessel %d as '%s'", mmsi, name)
+        self.vessel_devices[mmsi] = device
+        LOG.info("Published discovery for vessel %d as '%s' (%s)",
+                 mmsi, name, device["model"])
 
     def publish_vessels(self, ships):
         """Publish one device per configured vessel from a ships.json response."""
@@ -816,9 +824,14 @@ class Bridge:
             fresh = bool(ship) and not (
                 isinstance(age, (int, float)) and age > self.cfg.vessel_timeout)
 
-            name = self.vessel_name(mmsi, configured, payload)
-            if self.vessel_names.get(mmsi) != name:
-                self.publish_vessel_discovery(mmsi, name, payload)
+            # Announce again whenever the device block changed, not only on a
+            # new name: the type and the IMO usually arrive later than the
+            # first position report.
+            facts = self.remember(mmsi, payload)
+            name = self.vessel_name(mmsi, configured, facts)
+            device = self.vessel_device(mmsi, name, facts)
+            if self.vessel_devices.get(mmsi) != device:
+                self.publish_vessel_discovery(mmsi, device)
 
             if not fresh:
                 if mmsi in self.vessel_seen:
@@ -857,7 +870,7 @@ class Bridge:
         self.client.publish(self.cfg.fleet_topic, "", qos=1, retain=True)
         self.client.publish(self.cfg.station_topic, "", qos=1, retain=True)
 
-        for mmsi in self.vessel_names:
+        for mmsi in self.vessel_devices:
             self.client.publish(
                 self.cfg.vessel_discovery_topic("device_tracker", mmsi, "location"),
                 "", qos=1, retain=True)
@@ -930,7 +943,7 @@ class Bridge:
         if self.cfg.remove_on_stop:
             self.remove_discovery()
         else:
-            for mmsi in self.vessel_names:
+            for mmsi in self.vessel_devices:
                 self.client.publish(self.cfg.vessel_topic(mmsi, "/status"),
                                     "offline", qos=1, retain=True)
         self.client.publish(self.cfg.availability_topic, "offline", qos=1, retain=True)
