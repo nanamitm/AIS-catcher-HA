@@ -525,3 +525,16 @@ else:
     assert False, "a dead server must raise"
 assert e.stat_path is None
 print("ENDPOINT OK")
+
+# --- secrets --------------------------------------------------------------
+# A password may start or end with a space; trimming it silently breaks the
+# login with nothing in the log to explain why.
+os.environ.update({"MQTT_PASS": "  spaced  ", "MQTT_HOST": "  broker.local  ",
+                   "HTTP_USERNAME": "user", "HTTP_PASSWORD": " secret "})
+secrets = bridge.Config()
+assert secrets.mqtt_pass == "  spaced  ", repr(secrets.mqtt_pass)
+assert secrets.http_auth == ("user", " secret "), secrets.http_auth
+assert secrets.mqtt_host == "broker.local", repr(secrets.mqtt_host)
+os.environ.update({"MQTT_PASS": "x", "MQTT_HOST": "core-mosquitto"})
+os.environ.pop("HTTP_USERNAME"), os.environ.pop("HTTP_PASSWORD")
+print("SECRETS OK")

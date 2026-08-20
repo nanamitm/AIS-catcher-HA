@@ -17,6 +17,8 @@
 - Fix: the add-on declared `mqtt:need`, so it refused to start without a
   Supervisor-provided broker even though `mqtt_host` points it at an external
   one. It now declares `mqtt:want`.
+- Fix: leading or trailing spaces were stripped from the MQTT and HTTP
+  passwords, which turned a valid password into an authentication failure.
 
 ## 0.4.0
 

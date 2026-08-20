@@ -65,9 +65,19 @@ SIZE_UNITS = {"B": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 *
 SIZE_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*([KMGT]?B)?", re.IGNORECASE)
 
 
-def env(name, default=""):
+def env(name, default="", strip=True):
+    """Read an option.
+
+    Values are stripped because the add-on options arrive through bashio and
+    a stray space is never meant to be part of a host name or a URL.  Secrets
+    are read with strip=False: a password may legitimately begin or end with
+    whitespace, and silently trimming it turns into an authentication failure
+    with nothing in the log to explain it.
+    """
     value = os.environ.get(name, default)
-    return value.strip() if isinstance(value, str) else value
+    if strip and isinstance(value, str):
+        return value.strip()
+    return value
 
 
 def env_bool(name, default=False):
@@ -85,12 +95,12 @@ class Config:
         self.discovery_prefix = env("DISCOVERY_PREFIX", "homeassistant") or "homeassistant"
         self.http_auth = None
         if env("HTTP_USERNAME"):
-            self.http_auth = (env("HTTP_USERNAME"), env("HTTP_PASSWORD"))
+            self.http_auth = (env("HTTP_USERNAME"), env("HTTP_PASSWORD", strip=False))
         self.verify_ssl = env_bool("VERIFY_SSL", True)
         self.mqtt_host = env("MQTT_HOST", "core-mosquitto")
         self.mqtt_port = int(env("MQTT_PORT", "1883"))
         self.mqtt_user = env("MQTT_USER")
-        self.mqtt_pass = env("MQTT_PASS")
+        self.mqtt_pass = env("MQTT_PASS", strip=False)
         self.log_level = env("LOG_LEVEL", "info").upper()
 
         self.vessels = parse_vessels(env("VESSELS", "[]"))
