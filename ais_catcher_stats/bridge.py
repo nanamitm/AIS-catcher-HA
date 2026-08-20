@@ -295,6 +295,31 @@ class Bridge:
         if config.mqtt_user:
             self.client.username_pw_set(config.mqtt_user, config.mqtt_pass)
         self.client.will_set(config.availability_topic, "offline", retain=True)
+        self.client.on_connect = self.on_connect
+        self.client.on_disconnect = self.on_disconnect
+
+    # --- MQTT -----------------------------------------------------------
+
+    def on_connect(self, client, userdata, flags, rc, *_):
+        """Announce everything again after a reconnect.
+
+        paho reconnects on its own, but a broker without persistence loses
+        every retained message while it is down -- the discovery config
+        included.  Without forgetting what was announced the device would stay
+        missing from Home Assistant until the add-on is restarted by hand.
+        """
+        if rc != 0:
+            LOG.error("MQTT broker refused the connection (code %s)", rc)
+            return
+        if self.discovered or self.vessel_names:
+            LOG.info("Reconnected to MQTT, re-publishing discovery")
+        self.discovered = False
+        self.vessel_names.clear()
+        self.vessel_seen.clear()
+
+    def on_disconnect(self, client, userdata, rc, *_):
+        if rc != 0:
+            LOG.warning("Lost the MQTT connection (code %s), reconnecting", rc)
 
     # --- HTTP -----------------------------------------------------------
 

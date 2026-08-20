@@ -454,3 +454,25 @@ assert v.vessel_names[431000123] == "KAIYO MARU", "name downgraded when out of r
 assert len([t for t, _ in v.client.published if t.endswith("/config")]) == count_after_name
 assert dict(v.client.published)["aiscatcher/aiscatcher/vessel/219025528/status"] == "offline"
 print("NAME PERSISTENCE OK")
+
+# --- reconnect ------------------------------------------------------------
+# A broker without persistence drops the retained discovery while it is down,
+# so a reconnect has to announce everything again.
+v.client.published.clear()
+v.on_connect(v.client, None, {}, 0)
+assert v.vessel_names == {}, v.vessel_names
+v.publish_vessels(json.loads(json.dumps(SHIPS)))
+reannounced = [t for t, _ in v.client.published if t.endswith("/config")]
+assert len(reannounced) == 4 * (len(bridge.VESSEL_SENSORS) + 1), len(reannounced)
+# the name heard over the air survives the reconnect, it is not re-learned
+assert v.vessel_names[431000123] == "KAIYO MARU", v.vessel_names[431000123]
+
+b.client.published.clear()
+b.discovered = True
+b.on_connect(b.client, None, {}, 0)
+assert b.discovered is False
+# a refused connection must not wipe the state, there is nothing to re-announce
+b.discovered = True
+b.on_connect(b.client, None, {}, 5)
+assert b.discovered is True
+print("RECONNECT OK")

@@ -8,6 +8,9 @@
   discovery and collide on `unique_id`. Existing vessel devices are re-created
   under the new identifier on the first start; delete the old ones from the
   MQTT integration if they linger.
+- Fix: the device disappeared for good when the MQTT broker restarted without
+  persistence. Discovery is now re-published on every reconnect, and a lost
+  connection is logged instead of silently swallowed.
 
 ## 0.4.0
 
