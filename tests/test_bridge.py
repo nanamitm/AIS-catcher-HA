@@ -492,11 +492,14 @@ print("NAME PERSISTENCE OK")
 # A broker without persistence drops the retained discovery while it is down,
 # so a reconnect has to announce everything again.
 v.client.published.clear()
+v.station_published = True
 v.on_connect(v.client, None, {}, 0)
 assert v.vessel_devices == {}, v.vessel_devices
+assert v.station_published is False, "the receiver position was not re-announced"
 v.publish_vessels(json.loads(json.dumps(SHIPS)))
 reannounced = [t for t, _ in v.client.published if t.endswith("/config")]
-assert len(reannounced) == 4 * (len(bridge.VESSEL_SENSORS) + 1), len(reannounced)
+assert len(reannounced) == 4 * (len(bridge.VESSEL_SENSORS)
+                                + len(bridge.VESSEL_BINARY_SENSORS) + 1), len(reannounced)
 # what was heard over the air survives the reconnect, it is not re-learned
 assert v.vessel_devices[431000123]["name"] == "KAIYO MARU", v.vessel_devices[431000123]
 assert v.vessel_devices[999000111]["model"] == "Tug", v.vessel_devices[999000111]

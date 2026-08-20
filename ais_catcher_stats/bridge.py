@@ -325,6 +325,7 @@ class Bridge:
         if self.discovered or self.vessel_devices:
             LOG.info("Reconnected to MQTT, re-publishing discovery")
         self.discovered = False
+        self.station_published = False
         self.vessel_devices.clear()
         self.vessel_seen.clear()
 
