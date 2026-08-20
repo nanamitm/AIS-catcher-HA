@@ -330,9 +330,14 @@ class Bridge:
         return self.get_json("ship_path", SHIP_PATHS)
 
     def get_json(self, remembered, candidates):
-        """GET the first endpoint that answers, then stick to it."""
+        """GET the first endpoint that answers, then stick to it.
+
+        The remembered path is tried first, not exclusively: an AIS-catcher
+        upgrade can move the endpoint, and a bridge that only ever asks for the
+        path it learned once would keep failing on the same 404 forever.
+        """
         known = getattr(self, remembered)
-        paths = (known,) if known else candidates
+        paths = ([known] + [p for p in candidates if p != known]) if known else list(candidates)
         last_error = None
         for path in paths:
             try:
@@ -347,6 +352,10 @@ class Bridge:
                 continue
             if response.status_code == 404:
                 last_error = RuntimeError("%s returned 404" % path)
+                if known == path:
+                    LOG.info("Endpoint %s is gone, looking for another one", path)
+                    setattr(self, remembered, None)
+                    known = None
                 continue
             response.raise_for_status()
             if known != path:

@@ -476,3 +476,52 @@ b.discovered = True
 b.on_connect(b.client, None, {}, 5)
 assert b.discovered is True
 print("RECONNECT OK")
+
+# --- endpoint discovery ---------------------------------------------------
+
+
+class FakeResponse:
+    def __init__(self, status):
+        self.status_code = status
+
+    def raise_for_status(self):
+        assert self.status_code < 400
+
+    def json(self):
+        return {"ok": True}
+
+
+class FakeSession:
+    """Answers only the paths in `serving`, records what was asked for."""
+
+    def __init__(self, serving):
+        self.serving, self.asked = serving, []
+
+    def get(self, url, **kw):
+        path = url[len("http://localhost:8100"):]
+        self.asked.append(path)
+        return FakeResponse(200 if path in self.serving else 404)
+
+
+e = bridge.Bridge(cfg)
+e.session = FakeSession({"/stat.json"})           # an older AIS-catcher
+e.fetch()
+assert e.stat_path == "/stat.json", e.stat_path
+e.session.asked.clear()
+e.fetch()
+assert e.session.asked == ["/stat.json"], e.session.asked  # remembered, asked once
+
+e.session = FakeSession({"/api/stat.json"})       # ... which is then upgraded
+assert e.fetch() == {"ok": True}
+assert e.session.asked == ["/stat.json", "/api/stat.json"], e.session.asked
+assert e.stat_path == "/api/stat.json", e.stat_path
+
+e.session = FakeSession(set())                    # nothing answers any more
+try:
+    e.fetch()
+except Exception as err:
+    assert "404" in str(err), err
+else:
+    assert False, "a dead server must raise"
+assert e.stat_path is None
+print("ENDPOINT OK")

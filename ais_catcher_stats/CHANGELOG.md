@@ -11,6 +11,9 @@
 - Fix: the device disappeared for good when the MQTT broker restarted without
   persistence. Discovery is now re-published on every reconnect, and a lost
   connection is logged instead of silently swallowed.
+- Fix: once the bridge had settled on `/stat.json`, an AIS-catcher upgrade that
+  moves the endpoint left it polling a 404 forever. The remembered path is now
+  only tried first, and is forgotten as soon as it stops answering.
 
 ## 0.4.0
 
