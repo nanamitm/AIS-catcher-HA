@@ -20,6 +20,8 @@ no YAML, and the entities actually end up on one device.
 - An MQTT broker. The [Mosquitto broker](https://github.com/home-assistant/addons/tree/master/mosquitto)
   add-on plus the MQTT integration is enough — the credentials are picked up
   from the Supervisor automatically, you do not have to type them anywhere.
+  An external broker works too: set `mqtt_host` (and `mqtt_port`, `mqtt_user`,
+  `mqtt_password`) and the Mosquitto add-on is not needed at all.
 
 ## Installation
 

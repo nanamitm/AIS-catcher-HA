@@ -12,7 +12,10 @@ ingress_stream: true
 panel_icon: mdi:radar
 panel_title: AIS-catcher
 services:
-  - mqtt:need
+  # want, not need: an external broker can be configured through the
+  # mqtt_host option, and `need` would refuse to start without a
+  # Supervisor-provided one.
+  - mqtt:want
 options:
   url: "http://192.168.1.10:8100"
   scan_interval: 30

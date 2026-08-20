@@ -14,6 +14,9 @@
 - Fix: once the bridge had settled on `/stat.json`, an AIS-catcher upgrade that
   moves the endpoint left it polling a 404 forever. The remembered path is now
   only tried first, and is forgotten as soon as it stops answering.
+- Fix: the add-on declared `mqtt:need`, so it refused to start without a
+  Supervisor-provided broker even though `mqtt_host` points it at an external
+  one. It now declares `mqtt:want`.
 
 ## 0.4.0
 
