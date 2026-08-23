@@ -79,8 +79,8 @@ makes the dashboard's root-relative API and viewer URLs relative as it serves
 them, keeping login, controls, live logs and the embedded viewer inside the
 add-on's ingress path.
 
-With the default `managed_sidebar: web_viewer`, the sidebar instead shows the
-standalone web viewer managed mode brings up on the control port plus one.
+With `managed_sidebar: web_viewer`, the sidebar instead shows the standalone
+web viewer managed mode brings up on the control port plus one.
 
 ## Options
 
@@ -89,7 +89,7 @@ Only `mode`, `managed_sidebar` and `log_level` are read in managed mode.
 | Option | Default | Description |
 |---|---|---|
 | `mode` | `managed` | `manual` builds the command line from the options below; `managed` hands configuration to AIS-catcher's own dashboard on port 8118, which needs a newer AIS-catcher than this add-on installs. |
-| `managed_sidebar` | `web_viewer` | In managed mode, show either the standalone `web_viewer` or the management `dashboard` in the sidebar. Ignored in manual mode. |
+| `managed_sidebar` | `dashboard` | In managed mode, show either the management `dashboard` or the standalone `web_viewer` in the sidebar. Ignored in manual mode. |
 | `log_level` | `info` | `debug` prints every decoded message and statistics every 10s instead of every 60s. |
 
 Manual mode only:

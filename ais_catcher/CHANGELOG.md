@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Make the managed dashboard the default sidebar view. The standalone web
+  viewer remains available by setting `managed_sidebar: web_viewer`.
+
 ## 0.1.4
 
 - Cache-bust the dashboard's long-lived JavaScript URLs once and mark rewritten

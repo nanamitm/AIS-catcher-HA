@@ -108,6 +108,9 @@ excludes() {   # excludes <what> <needle> <haystack>
 
 D="${WORK}/data"
 
+contains "managed dashboard is the manifest default" \
+    "managed_sidebar: dashboard" "$(cat "${HERE}/../ais_catcher/config.yaml")"
+
 # --------------------------------------------------------------- the cases ---
 
 echo "# managed mode, on an AIS-catcher that has it"
