@@ -3,9 +3,8 @@ configuration:
     name: Configuration mode
     description: >-
       Manual builds the AIS-catcher command line from the options below.
-      Managed hands configuration to AIS-catcher's own dashboard, on port 8118
-      of this host, and ignores those options -- but needs a newer AIS-catcher
-      than this add-on installs.
+      Managed, the default here, hands configuration to AIS-catcher's own
+      dashboard on port 8118 of this host and ignores those options.
   log_level:
     name: Log level
     description: >-
