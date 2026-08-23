@@ -1,5 +1,5 @@
 name: AIS-catcher Receiver
-version: "0.1.1"
+version: "0.1.2"
 slug: ais_catcher
 description: Run AIS-catcher itself on Home Assistant, with the SDR plugged into the host
 url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher

@@ -130,6 +130,8 @@ contains "ingress points at the managed dashboard" \
     "proxy_pass http://127.0.0.1:8118;" "$(cat "${WORK}/nginx/upstream.conf")"
 contains "root-relative dashboard APIs are made ingress-relative" \
     "sub_filter \"'/api/\" \"'api/\";" "$(cat "${WORK}/nginx/upstream.conf")"
+contains "compressed dashboard assets are decompressed before rewriting" \
+    "gunzip on;" "$(cat "${WORK}/nginx/upstream.conf")"
 contains "dashboard selection is logged" \
     "sidebar panel shows the management dashboard" "${LOG}"
 

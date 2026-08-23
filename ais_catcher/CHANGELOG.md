@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+- Decompress the managed dashboard's always-gzipped responses inside the
+  ingress proxy before rewriting its root-relative API and viewer URLs. This
+  fixes `Connection Error` in the sidebar caused by requests escaping to Home
+  Assistant's `/api/status` and returning 404.
+
 ## 0.1.1
 
 - Add `managed_sidebar`, allowing managed mode's sidebar panel to show either
