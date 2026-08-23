@@ -1,0 +1,63 @@
+name: AIS-catcher Receiver
+version: "0.1.0"
+slug: ais_catcher
+description: Run AIS-catcher itself on Home Assistant, with the SDR plugged into the host
+url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+startup: services
+boot: auto
+
+# The SDR is a USB device on the host: `usb` maps /dev/bus/usb into the add-on
+# and `udev` gives AIS-catcher the device metadata it needs to tell dongles
+# apart.  `uart` is for the serial receivers (dAISy and friends).
+# `full_access` would also work and is deliberately not used -- it turns off
+# protection mode for the whole add-on and is not needed for libusb.
+usb: true
+udev: true
+uart: true
+
+ingress: true
+ingress_stream: true
+panel_icon: mdi:access-point
+panel_title: AIS Receiver
+
+# The web viewer, which is what the Statistics add-on polls and what the rest of
+# the network connects to.  The container side is fixed (see run.sh); the host
+# side can be changed in the add-on's Network panel.
+ports:
+  8100/tcp: 8100
+ports_description:
+  8100/tcp: >-
+    AIS-catcher web viewer. The Statistics add-on reads api/stat.json here.
+
+options:
+  mode: manual
+  log_level: info
+  udp_targets: []
+schema:
+  mode: list(managed|manual)
+  log_level: list(debug|info|warning|error)
+  # Everything below is read in manual mode only -- in managed mode the station
+  # is configured from the dashboard and stored in /data/config.json.
+  device_index: int(0,16)?
+  device_serial: str?
+  sample_rate: str?
+  tuner_gain: str?
+  rtlagc: bool?
+  biastee: bool?
+  freq_correction: int(-150,150)?
+  station_name: str?
+  latitude: float?
+  longitude: float?
+  share_location: bool?
+  web_plugins: bool?
+  share_community: bool?
+  sharing_key: password?
+  udp_targets:
+    - host: str
+      port: port
+  extra_args: str?
