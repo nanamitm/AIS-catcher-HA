@@ -10,12 +10,11 @@ somewhere else on the network.
   device, gain, sample rate, frequency correction, station name and position,
   web viewer, community feed sharing key and UDP targets — plus `extra_args`
   for everything else AIS-catcher accepts.
-- Managed mode for handing configuration to AIS-catcher's own dashboard, which
-  lands in the sidebar through ingress, bound to localhost inside the add-on so
-  that its password is not needed on top of the Home Assistant login. It is not
-  in the AIS-catcher release this add-on installs; the add-on checks and says
-  so rather than passing on the unrelated error AIS-catcher gives for `-E`
-  there.
+- Managed mode for handing configuration to AIS-catcher's own dashboard, on
+  port 8118 of the host and under a password of its own; the sidebar panel
+  shows the web viewer it brings up alongside. It is not in the AIS-catcher
+  release this add-on installs; the add-on checks and says so rather than
+  passing on the unrelated error AIS-catcher gives for `-E` there.
 - The web viewer is published on port 8100 for the Statistics add-on and for
   the rest of the network.
 - Community feed sharing is off unless asked for, with `share_community` or a

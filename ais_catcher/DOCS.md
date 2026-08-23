@@ -55,12 +55,6 @@ the receiver is started and stopped from there, and the settings live in
 `/data/config.json`, which AIS-catcher writes itself. None of the other add-on
 options are read.
 
-The dashboard is bound to `127.0.0.1` inside the add-on and reaches the sidebar
-through a proxy in the same container. That is deliberate: AIS-catcher requires
-a password of its own as soon as it is bound to anything else, and the ingress
-panel is already behind the Home Assistant login. It also means the dashboard
-cannot be reached from the network at all, which is what upstream recommends.
-
 **Managed mode needs a newer AIS-catcher than this add-on installs.** It is not
 in the v0.70 release; in that release `-E` means something else entirely. The
 add-on asks the binary what it supports and refuses to start with an
@@ -69,10 +63,20 @@ mode and the add-on stops with *"This AIS-catcher does not have managed
 mode"*, that is why. Raise `AIS_CATCHER_VERSION` in `build.yaml` and rebuild to
 use it.
 
-In managed mode the web viewer is a separate output you add from the dashboard,
-and it defaults to the control port plus one rather than to 8100. **Set it to
-8100** — that is the port this add-on publishes, and the one the Statistics
-add-on polls.
+The dashboard is on **port 8118 of the Home Assistant host**, not in the
+sidebar, and asks you to set a password of its own the first time you open it.
+That is not a choice this add-on makes: the dashboard's page fetches
+`/api/status`, `/api/login` and the rest with a leading slash, and under the
+ingress path prefix the browser resolves those against Home Assistant rather
+than against the add-on — the requests never arrive, and the page shows
+*Connection Error*. Publishing it is how upstream intends it to be reached, and
+binding it anywhere other than localhost is what makes AIS-catcher require the
+password.
+
+The sidebar panel shows the **web viewer** managed mode brings up alongside the
+dashboard, on the control port plus one. That one is built with relative paths
+and proxies fine. So the two split cleanly: sidebar for the map, host port for
+the controls.
 
 ## Options
 
@@ -80,7 +84,7 @@ Only `mode` and `log_level` are read in managed mode.
 
 | Option | Default | Description |
 |---|---|---|
-| `mode` | `manual` | `manual` builds the command line from the options below; `managed` hands configuration to AIS-catcher's own dashboard, which needs a newer AIS-catcher than this add-on installs. |
+| `mode` | `manual` | `manual` builds the command line from the options below; `managed` hands configuration to AIS-catcher's own dashboard on port 8118, which needs a newer AIS-catcher than this add-on installs. |
 | `log_level` | `info` | `debug` prints every decoded message and statistics every 10s instead of every 60s. |
 
 Manual mode only:
@@ -165,12 +169,13 @@ If you do not want two, turn off **Show in sidebar** on either add-on's page.
 
 ## Ports
 
-`8100/tcp` is mapped to port 8100 on the host so that the Statistics add-on,
-OpenCPN, a browser on your phone and anything else on the network can reach the
-web viewer. The host side can be changed under **Network** on the add-on page
-if something else already uses 8100; the container side is fixed.
+`8100/tcp` carries the manual-mode web viewer, so that OpenCPN, a browser on
+your phone and anything else on the network can reach it. `8118/tcp` carries
+the managed-mode dashboard; nothing listens there in manual mode. The host side
+of either can be changed under **Network** on the add-on page if something else
+already uses that port; the container side is fixed.
 
-The managed dashboard is not published and cannot be.
+The Statistics add-on needs neither — it reaches this add-on by name.
 
 ## Restarting on failure
 
@@ -213,9 +218,14 @@ receiving regardless. In manual mode the panel is also empty until the receiver
 has actually started.
 
 **The Statistics add-on cannot reach it.**
-`http://eb24ddf7-ais-catcher:8100/api/stat.json` has to return JSON. In managed mode that
-means a web viewer output on port 8100, which is not there until you add it in
-the dashboard.
+`http://eb24ddf7-ais-catcher:8100/api/stat.json` has to return JSON. In managed
+mode the viewer is on the control port plus one instead, so point the
+Statistics add-on at `:8119` or set the viewer to 8100 from the dashboard.
+
+**The dashboard shows "Connection Error" in the sidebar.** The sidebar panel is
+the web viewer, not the dashboard, and it stays empty until the receiver is
+running. The dashboard is on port 8118 of the host — it cannot work through
+ingress, see [Managed](#managed).
 
 **The add-on stops with "This AIS-catcher does not have managed mode".** The
 pinned AIS-catcher release does not have it. Set `mode` back to `manual`, or

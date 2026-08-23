@@ -115,10 +115,13 @@ AIS_CATCHER_HELP="	[-E [config file] [bind address:port] - managed mode]"
 run_case '{"mode":"managed","log_level":"info","udp_targets":[]}'
 check "starts AIS-catcher" "AIS-catcher" "${CMD}"
 check "runs the dashboard and nothing else" \
-    "-E ${D}/config.json 127.0.0.1:8118" "${ARGV}"
-check "ingress points at the dashboard" \
-    "proxy_pass http://127.0.0.1:8118;" "$(cat "${WORK}/nginx/upstream.conf")"
-contains "the first start mentions the wizard" "setup wizard" "${LOG}"
+    "-E ${D}/config.json 0.0.0.0:8118" "${ARGV}"
+# Never the dashboard: it fetches /api/... with a leading slash, which under the
+# ingress path prefix the browser sends to Home Assistant instead of here.
+check "ingress points at the managed web viewer" \
+    "proxy_pass http://127.0.0.1:8119;" "$(cat "${WORK}/nginx/upstream.conf")"
+contains "the first start mentions the password" "set a password" "${LOG}"
+contains "and says where the dashboard is" "port 8118 of this host" "${LOG}"
 
 echo
 echo "# managed mode, on an AIS-catcher that does not"

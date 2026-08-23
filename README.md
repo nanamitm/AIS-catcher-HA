@@ -67,9 +67,10 @@ sidebar through ingress.
 
 There is also a `mode: managed`, which hands all of that to AIS-catcher's own
 dashboard — configured from the browser, stored in a file the program
-maintains. It is newer than the AIS-catcher release this add-on installs, so it
-needs `AIS_CATCHER_VERSION` raised in `build.yaml` first; the add-on checks and
-says so rather than failing obscurely.
+maintains, reached on port 8118 of the host under a password of its own. It is
+newer than the AIS-catcher release this add-on installs, so it needs
+`AIS_CATCHER_VERSION` raised in `build.yaml` first; the add-on checks and says
+so rather than failing obscurely.
 
 The web viewer is published on port 8100 for the rest of the network and for
 OpenCPN. The Statistics add-on does not need that port at all — it reaches the

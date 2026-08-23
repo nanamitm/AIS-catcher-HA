@@ -8,9 +8,17 @@ set -e
 # two drift apart and leave the mapped port pointing at nothing.
 WEB_PORT=8100
 
-# Managed mode serves its dashboard here.  Nothing outside this container talks
-# to it: nginx proxies it to the ingress panel.  See nginx.conf for why.
+# Managed mode's dashboard, published to the host.  It cannot go through the
+# ingress panel: its frontend fetches /api/status, /api/login and the rest with
+# a leading slash, so under the ingress path prefix the browser sends them to
+# Home Assistant instead of here and nginx never sees them.  Published means
+# AIS-catcher requires a password of its own, which is how upstream intends it
+# to be reached anyway.
 DASHBOARD_PORT=8118
+
+# Managed mode also brings up a web viewer, on the control port plus one.  That
+# one does use relative paths, so it is what the ingress panel shows.
+MANAGED_VIEWER_PORT=8119
 
 # These three are what the add-on really uses; they are only overridable so that
 # tests/test_run_args.sh can run this script outside the container, against a
@@ -24,7 +32,7 @@ MODE="$(bashio::config 'mode')"
 # ---------------------------------------------------------------- ingress ----
 
 if [ "${MODE}" = "managed" ]; then
-    UPSTREAM_PORT="${DASHBOARD_PORT}"
+    UPSTREAM_PORT="${MANAGED_VIEWER_PORT}"
 else
     UPSTREAM_PORT="${WEB_PORT}"
 fi
@@ -60,16 +68,15 @@ if [ "${MODE}" = "managed" ]; then
         bashio::exit.nok
     fi
 
-    bashio::log.info "Managed mode. Configure the station from the sidebar panel."
+    bashio::log.info "Managed mode. The dashboard is on port ${DASHBOARD_PORT} of this host."
     if [ ! -f "${DATA_DIR}/config.json" ]; then
-        bashio::log.info "First start: the panel opens the setup wizard."
+        bashio::log.info "First use: it asks you to set a password, then runs the setup wizard."
     fi
-    bashio::log.info "Give the station a web viewer output on port ${WEB_PORT} to reach"
-    bashio::log.info "it from the network and to feed the Statistics add-on."
+    bashio::log.info "The sidebar panel shows the web viewer once the receiver runs."
 
     # Supplying any other option puts AIS-catcher back into manual mode and the
     # dashboard is never started, so -E has to stand alone here.
-    exec AIS-catcher -E "${DATA_DIR}/config.json" "127.0.0.1:${DASHBOARD_PORT}"
+    exec AIS-catcher -E "${DATA_DIR}/config.json" "0.0.0.0:${DASHBOARD_PORT}"
 fi
 
 # ------------------------------------------------------------ manual mode ----
