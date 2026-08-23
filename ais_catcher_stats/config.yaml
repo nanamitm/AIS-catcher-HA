@@ -1,5 +1,5 @@
 name: AIS-catcher Statistics
-version: "0.5.0"
+version: "0.5.1"
 slug: ais_catcher_stats
 description: AIS-catcher statistics and vessel trackers in Home Assistant, via MQTT discovery
 url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher_stats
@@ -19,6 +19,7 @@ services:
 options:
   url: "http://192.168.1.10:8100"
   sidebar_view: web_viewer
+  dashboard_url: "http://192.168.1.10:8118"
   scan_interval: 30
   device_name: "AIS-catcher"
   device_id: "aiscatcher"
@@ -32,7 +33,7 @@ options:
 schema:
   url: url
   sidebar_view: list(web_viewer|dashboard)
-  dashboard_url: url?
+  dashboard_url: url
   scan_interval: int(5,3600)
   device_name: str
   device_id: match(^[a-z0-9_]+$)

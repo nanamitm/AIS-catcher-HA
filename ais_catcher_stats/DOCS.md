@@ -63,6 +63,7 @@ statistics; only the panel is affected.
 |---|---|---|
 | `url` | `http://192.168.1.10:8100` | Base URL of the AIS-catcher web server. The add-on tries `/api/stat.json` first and falls back to `/stat.json` for older builds. |
 | `sidebar_view` | `web_viewer` | Show the web viewer from `url`, or the managed `dashboard` from `dashboard_url`. |
+| `dashboard_url` | `http://192.168.1.10:8118` | Managed dashboard URL. It is always shown in the configuration form and does not change the statistics source. |
 | `scan_interval` | `30` | Seconds between polls (5–3600). |
 | `device_name` | `AIS-catcher` | Name of the device in Home Assistant. |
 | `device_id` | `aiscatcher` | Identifier used in entity ids and MQTT topics. Give each receiver its own value if you run several instances of this add-on. |
@@ -78,7 +79,6 @@ Optional (hidden unless you add them):
 
 | Option | Description |
 |---|---|
-| `dashboard_url` | Managed dashboard URL, for example `http://192.168.1.10:8118`. Required when `sidebar_view` is `dashboard`; it does not change the statistics source. |
 | `http_username` / `http_password` | Basic auth for the AIS-catcher web server. |
 | `verify_ssl` | Set to `false` for a self-signed HTTPS certificate. |
 | `discovery_prefix` | MQTT discovery prefix, if you changed it from `homeassistant`. |

@@ -61,6 +61,10 @@ run_case() {
 
 BASE='"scan_interval":30,"device_name":"AIS-catcher","device_id":"aiscatcher","message_type_sensors":true,"remove_entities_on_stop":false,"log_level":"info","vessels":[],"vessel_timeout":30,"fleet_sensors":true,"nearby_radius":5'
 
+contains "dashboard URL has a visible manifest default" \
+    'dashboard_url: "http://192.168.1.10:8118"' \
+    "$(cat "${HERE}/../ais_catcher_stats/config.yaml")"
+
 echo "# web viewer"
 run_case "{${BASE},\"url\":\"http://receiver.local:8100\",\"sidebar_view\":\"web_viewer\"}"
 contains "viewer uses the statistics URL" 'set $ais_upstream "http://receiver.local:8100";' "${UPSTREAM}"

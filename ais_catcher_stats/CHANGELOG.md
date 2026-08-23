@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- Always show `dashboard_url` in Home Assistant's configuration form by giving
+  it a visible default and making it a regular URL field. It previously worked
+  in the YAML editor but could remain absent from the generated form.
+
 ## 0.5.0
 
 - Add `sidebar_view`, switching the panel between the existing web viewer and
