@@ -127,6 +127,10 @@ The AIS-catcher map itself lands in the Home Assistant sidebar through ingress,
 behind your Home Assistant login — so it also works from outside the house
 without exposing the receiver.
 
+The Statistics add-on can also show a managed AIS-catcher dashboard in that
+panel: set `sidebar_view: dashboard` and point `dashboard_url` at its control
+server, normally port 8118. Statistics still use the separate `url` option.
+
 It is a bridge only — it does not run AIS-catcher itself, so it works both with
 the Receiver add-on above and with a receiver running elsewhere on the network.
 

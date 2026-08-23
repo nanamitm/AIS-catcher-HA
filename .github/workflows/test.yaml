@@ -26,4 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run the command line test
-        run: bash tests/test_run_args.sh
+        run: |
+          bash tests/test_run_args.sh
+          bash tests/test_stats_sidebar.sh

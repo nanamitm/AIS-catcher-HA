@@ -4,6 +4,10 @@ set -e
 AIS_URL="$(bashio::config 'url')"
 AIS_URL="${AIS_URL%/}"
 export AIS_URL
+SIDEBAR_VIEW="$(bashio::config 'sidebar_view' 'web_viewer')"
+DASHBOARD_URL="$(bashio::config 'dashboard_url' '')"
+DASHBOARD_URL="${DASHBOARD_URL%/}"
+NGINX_CONF_DIR="${NGINX_CONF_DIR:-/etc/nginx}"
 export SCAN_INTERVAL="$(bashio::config 'scan_interval')"
 export DEVICE_NAME="$(bashio::config 'device_name')"
 export DEVICE_ID="$(bashio::config 'device_id')"
@@ -49,9 +53,9 @@ else
     export MQTT_PASS="$(bashio::services mqtt 'password')"
 fi
 
-# The ingress panel: nginx proxies the AIS-catcher web UI so it shows up in the
-# Home Assistant sidebar.  Only the upstream and its credentials vary, so they
-# go in a snippet that /etc/nginx/nginx.conf includes.
+# The ingress panel: nginx proxies either the AIS-catcher web viewer or its
+# managed dashboard into the Home Assistant sidebar. Statistics always keep
+# polling AIS_URL; the display choice does not change their data source.
 #
 # A host name written straight into proxy_pass is resolved once, when nginx
 # starts, and cached for the life of the process.  A receiver on DHCP or mDNS
@@ -60,18 +64,23 @@ fi
 # variable makes nginx resolve per request, which needs an explicit resolver --
 # the container's own, so it keeps resolving whatever it resolves today.
 RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)"
-{
+write_proxy_target() {
+    local TARGET_URL="$1"
+    local OUTPUT_FILE="$2"
+    local DECOMPRESS="$3"
+
+    {
     if [ -n "${RESOLVER}" ]; then
         echo "resolver ${RESOLVER} valid=30s;"
-        echo "set \$ais_upstream \"${AIS_URL}\";"
+        echo "set \$ais_upstream \"${TARGET_URL}\";"
         # With a variable nginx no longer appends the location's URI, so the
         # request path has to be passed on explicitly.
         # shellcheck disable=SC2016  # these are nginx variables, not the shell's
         echo 'proxy_pass $ais_upstream$request_uri;'
     else
-        echo "proxy_pass ${AIS_URL}/;"
+        echo "proxy_pass ${TARGET_URL}/;"
     fi
-    case "${AIS_URL}" in
+    case "${TARGET_URL}" in
         https://*)
             echo "proxy_ssl_server_name on;"
             # nginx does not verify an upstream certificate unless told to, which
@@ -87,7 +96,40 @@ RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)
         CREDENTIALS="$(printf '%s:%s' "${HTTP_USERNAME}" "${HTTP_PASSWORD}" | base64 | tr -d '\n')"
         echo "proxy_set_header Authorization \"Basic ${CREDENTIALS}\";"
     fi
-} > /etc/nginx/upstream.conf
+    if [ "${DECOMPRESS}" = "true" ]; then
+        echo 'proxy_set_header Accept-Encoding "";'
+        echo 'gunzip on;'
+    fi
+    } > "${OUTPUT_FILE}"
+}
+
+if [ "${SIDEBAR_VIEW}" = "dashboard" ]; then
+    if [ -z "${DASHBOARD_URL}" ]; then
+        bashio::log.warning "sidebar_view is dashboard but dashboard_url is empty; showing the web viewer instead."
+        SIDEBAR_VIEW="web_viewer"
+    else
+        write_proxy_target "${DASHBOARD_URL}" "${NGINX_CONF_DIR}/decompress_upstream.conf" true
+        cat > "${NGINX_CONF_DIR}/upstream.conf" <<'EOF'
+proxy_pass http://127.0.0.1:8098;
+proxy_set_header Host $http_host;
+proxy_set_header Accept-Encoding "";
+proxy_hide_header Cache-Control;
+add_header Cache-Control "no-store" always;
+sub_filter_once off;
+sub_filter_types application/javascript text/javascript;
+sub_filter "?hash=" "?ingress=stats&hash=";
+sub_filter "'/api/" "'api/";
+sub_filter '\"/api/' '\"api/';
+sub_filter "'/viewer/" "'viewer/";
+sub_filter '\"/viewer/' '\"viewer/';
+EOF
+    fi
+fi
+
+if [ "${SIDEBAR_VIEW}" = "web_viewer" ]; then
+    write_proxy_target "${AIS_URL}" "${NGINX_CONF_DIR}/upstream.conf" false
+    echo 'return 503;' > "${NGINX_CONF_DIR}/decompress_upstream.conf"
+fi
 
 if [ -z "${RESOLVER}" ]; then
     bashio::log.warning "No nameserver found; the web UI proxy will keep the receiver address it starts with."
@@ -98,7 +140,11 @@ fi
 mkdir -p /tmp/nginx_client_body /tmp/nginx_proxy
 chmod 777 /tmp/nginx_client_body /tmp/nginx_proxy
 if NGINX_CHECK="$(nginx -t 2>&1)" && nginx; then
-    bashio::log.info "Web UI proxied to the sidebar panel."
+    if [ "${SIDEBAR_VIEW}" = "dashboard" ]; then
+        bashio::log.info "Managed dashboard ${DASHBOARD_URL} proxied to the sidebar panel."
+    else
+        bashio::log.info "Web viewer ${AIS_URL} proxied to the sidebar panel."
+    fi
 else
     # A broken panel must not take the statistics down with it, but the reason
     # has to reach the log -- DOCS.md sends people here to find out why the

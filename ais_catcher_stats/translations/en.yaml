@@ -3,6 +3,15 @@ configuration:
     name: AIS-catcher URL
     description: >-
       Base URL of the AIS-catcher web server, for example http://192.168.1.10:8100
+  sidebar_view:
+    name: Sidebar view
+    description: >-
+      Show the web viewer from url, or the managed dashboard from dashboard_url.
+  dashboard_url:
+    name: Managed dashboard URL
+    description: >-
+      Required when Sidebar view is dashboard, for example
+      http://192.168.1.10:8118. Statistics are still read from AIS-catcher URL.
   scan_interval:
     name: Scan interval
     description: Seconds between two polls of stat.json.

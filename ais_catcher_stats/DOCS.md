@@ -31,11 +31,16 @@ no YAML, and the entities actually end up on one device.
 3. Set `url` to your AIS-catcher web server and start the add-on.
 4. The device appears under **Settings → Devices & services → MQTT**.
 
-## The map in the sidebar
+## The sidebar
 
-The add-on proxies the AIS-catcher web UI through Home Assistant ingress, so
-the map appears in the sidebar as **AIS-catcher** — no configuration, it uses
-the same `url` as the statistics.
+The add-on proxies AIS-catcher through Home Assistant ingress. By default the
+sidebar shows the web viewer from `url`. Set `sidebar_view: dashboard` and
+`dashboard_url` (for example `http://192.168.1.10:8118`) to show AIS-catcher's
+managed dashboard instead. Statistics continue to come from `url` either way.
+
+The managed dashboard requires a recent AIS-catcher build and asks for its own
+password. Its API, event stream and embedded viewer remain inside Home
+Assistant ingress; the receiver does not need to be exposed to the internet.
 
 Because the page is served through Home Assistant rather than fetched by the
 browser:
@@ -57,6 +62,7 @@ statistics; only the panel is affected.
 | Option | Default | Description |
 |---|---|---|
 | `url` | `http://192.168.1.10:8100` | Base URL of the AIS-catcher web server. The add-on tries `/api/stat.json` first and falls back to `/stat.json` for older builds. |
+| `sidebar_view` | `web_viewer` | Show the web viewer from `url`, or the managed `dashboard` from `dashboard_url`. |
 | `scan_interval` | `30` | Seconds between polls (5–3600). |
 | `device_name` | `AIS-catcher` | Name of the device in Home Assistant. |
 | `device_id` | `aiscatcher` | Identifier used in entity ids and MQTT topics. Give each receiver its own value if you run several instances of this add-on. |
@@ -72,6 +78,7 @@ Optional (hidden unless you add them):
 
 | Option | Description |
 |---|---|
+| `dashboard_url` | Managed dashboard URL, for example `http://192.168.1.10:8118`. Required when `sidebar_view` is `dashboard`; it does not change the statistics source. |
 | `http_username` / `http_password` | Basic auth for the AIS-catcher web server. |
 | `verify_ssl` | Set to `false` for a self-signed HTTPS certificate. |
 | `discovery_prefix` | MQTT discovery prefix, if you changed it from `homeassistant`. |

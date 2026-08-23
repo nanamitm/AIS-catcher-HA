@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Add `sidebar_view`, switching the panel between the existing web viewer and
+  AIS-catcher's managed dashboard at `dashboard_url`.
+- Keep statistics polling on `url` regardless of the sidebar choice.
+- Proxy the managed dashboard through the same two-stage gzip decompression,
+  ingress URL rewriting and cache protection used by the Receiver add-on.
+- Fall back to the web viewer with a warning when dashboard mode is selected
+  without `dashboard_url`, so MQTT statistics continue running.
+
 ## 0.4.3
 
 - Fix: every start logged `Reconnected to MQTT` and announced all 36 entities a
