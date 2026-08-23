@@ -1,0 +1,90 @@
+configuration:
+  mode:
+    name: Configuration mode
+    description: >-
+      Manual builds the AIS-catcher command line from the options below.
+      Managed hands configuration to AIS-catcher's own dashboard in the sidebar
+      and ignores those options, but needs a newer AIS-catcher than this add-on
+      installs.
+  log_level:
+    name: Log level
+    description: >-
+      Set to debug to print every decoded message and more frequent statistics.
+  device_index:
+    name: Device index
+    description: >-
+      Which connected SDR to use, counting from 0. Only needed with more than
+      one device. Manual mode only.
+  device_serial:
+    name: Device serial number
+    description: >-
+      Serial number of the SDR to use, which survives replugging in a different
+      order. Takes precedence over the device index. Manual mode only.
+  tuner_gain:
+    name: Tuner gain
+    description: >-
+      RTL-SDR tuner gain in dB (0-50), or auto. Manual mode only.
+  sample_rate:
+    name: Sample rate
+    description: >-
+      Sampling rate in Hz, for example 1536K or 288K. Leave empty for the
+      device default. Manual mode only.
+  freq_correction:
+    name: Frequency correction
+    description: >-
+      Crystal error of the dongle in PPM. The web viewer reports the drift it
+      measures per message. Manual mode only.
+  rtlagc:
+    name: RTL AGC
+    description: Enable the RTL2832U automatic gain control. Manual mode only.
+  biastee:
+    name: Bias tee
+    description: >-
+      Feed power up the antenna cable for a mast-head amplifier. Leave off
+      unless the hardware needs it. Manual mode only.
+  station_name:
+    name: Station name
+    description: Name shown in the web viewer. Manual mode only.
+  latitude:
+    name: Station latitude
+    description: >-
+      Needed for distances, bearings and the reception range. Set together with
+      the longitude. Manual mode only.
+  longitude:
+    name: Station longitude
+    description: Set together with the latitude. Manual mode only.
+  share_location:
+    name: Show the station on the map
+    description: >-
+      Let the web viewer display the station position and the range circle.
+      Without it the coordinates are used for statistics only. Manual mode only.
+  web_plugins:
+    name: Web viewer plugins
+    description: >-
+      Load the plugins that ship with AIS-catcher, which add extra map layers
+      and aggregator lookups to the ship card. Manual mode only.
+  share_community:
+    name: Share with the community feed
+    description: >-
+      Upload what this station receives to the aiscatcher.org community feed,
+      anonymously. Off by default; AIS-catcher on its own would share.
+      Manual mode only.
+  sharing_key:
+    name: Community feed sharing key
+    description: >-
+      Share under your own station at aiscatcher.org rather than anonymously.
+      Setting a key turns sharing on by itself. Manual mode only.
+  udp_targets:
+    name: UDP targets
+    description: >-
+      Where to send raw NMEA, for example OpenCPN or an aggregator's feeder.
+      One host and port per entry. Manual mode only.
+  extra_args:
+    name: Extra command line options
+    description: >-
+      Passed to AIS-catcher unchanged, for anything this add-on does not offer
+      as an option. Separated by spaces; quoting is not supported. Manual mode
+      only.
+network:
+  8100/tcp: >-
+    Web viewer. The Statistics add-on reads api/stat.json here.

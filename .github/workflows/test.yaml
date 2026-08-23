@@ -19,3 +19,11 @@ jobs:
         run: pip install -r tests/requirements.txt
       - name: Run the bridge test
         run: python tests/test_bridge.py
+
+  run-args:
+    name: Receiver command line test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the command line test
+        run: bash tests/test_run_args.sh
