@@ -28,9 +28,15 @@ panel_title: AIS Receiver
 # side can be changed in the add-on's Network panel.
 ports:
   8100/tcp: 8100
+  8118/tcp: 8118
 ports_description:
   8100/tcp: >-
-    AIS-catcher web viewer. The Statistics add-on reads api/stat.json here.
+    AIS-catcher web viewer in manual mode. The Statistics add-on reads
+    api/stat.json here.
+  8118/tcp: >-
+    The dashboard in managed mode, which asks for a password of its own. It
+    cannot be reached through the sidebar panel; nothing listens here in
+    manual mode.
 
 options:
   mode: manual
