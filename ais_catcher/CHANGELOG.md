@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Move gzip decompression into a separate internal nginx proxy stage. nginx's
+  filter order prevented the 0.1.2 single-stage `gunzip` and `sub_filter`
+  combination from rewriting the dashboard, so `/api/status` and `/viewer/`
+  still escaped Home Assistant ingress and returned 404.
+
 ## 0.1.2
 
 - Decompress the managed dashboard's always-gzipped responses inside the

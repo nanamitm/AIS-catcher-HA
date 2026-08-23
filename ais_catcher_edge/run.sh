@@ -34,14 +34,14 @@ if [ "${MODE}" = "managed" ] &&
     UPSTREAM_PORT="${DASHBOARD_PORT}"
     # The control frontend uses root-relative /api and /viewer URLs. Under HA
     # ingress those escape the add-on's path prefix, so make them relative as
-    # the responses pass through nginx. AIS-catcher currently returns gzip even
-    # when nginx asks for identity encoding, so enable gunzip before applying
-    # the substitutions in HTML and JavaScript.
+    # the responses pass through nginx. AIS-catcher always returns gzip, and
+    # nginx's gunzip and sub filters cannot reliably be chained in one proxy
+    # location. The internal proxy in nginx.conf expands the response first;
+    # this outer location then receives plain HTML/JavaScript to rewrite.
     cat > "${NGINX_CONF_DIR}/upstream.conf" <<EOF
-proxy_pass http://127.0.0.1:${UPSTREAM_PORT};
+proxy_pass http://127.0.0.1:8098;
 proxy_set_header Host \$http_host;
 proxy_set_header Accept-Encoding "";
-gunzip on;
 sub_filter_once off;
 sub_filter_types application/javascript text/javascript;
 sub_filter "'/api/" "'api/";

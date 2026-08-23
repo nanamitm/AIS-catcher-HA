@@ -127,11 +127,11 @@ echo
 echo "# managed mode, with the dashboard in the sidebar"
 run_case '{"mode":"managed","managed_sidebar":"dashboard","log_level":"info","udp_targets":[]}'
 contains "ingress points at the managed dashboard" \
-    "proxy_pass http://127.0.0.1:8118;" "$(cat "${WORK}/nginx/upstream.conf")"
+    "proxy_pass http://127.0.0.1:8098;" "$(cat "${WORK}/nginx/upstream.conf")"
 contains "root-relative dashboard APIs are made ingress-relative" \
     "sub_filter \"'/api/\" \"'api/\";" "$(cat "${WORK}/nginx/upstream.conf")"
-contains "compressed dashboard assets are decompressed before rewriting" \
-    "gunzip on;" "$(cat "${WORK}/nginx/upstream.conf")"
+check "decompression is not mixed with response rewriting" \
+    "" "$(grep 'gunzip on' "${WORK}/nginx/upstream.conf" || true)"
 contains "dashboard selection is logged" \
     "sidebar panel shows the management dashboard" "${LOG}"
 
