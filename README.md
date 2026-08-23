@@ -8,6 +8,9 @@ Two add-ons that work together, or on their own:
   itself, with the SDR plugged into it.
 - **AIS-catcher Statistics** turns any running AIS-catcher — the add-on above,
   or a receiver elsewhere on the network — into Home Assistant entities.
+- **AIS-catcher Receiver (Edge)** is the same receiver built against
+  AIS-catcher's rolling `Edge` build, for the managed mode that no tagged
+  release contains yet.
 
 If the SDR is on the Home Assistant machine, install both. If AIS-catcher
 already runs on a Raspberry Pi in the attic, install Statistics only.
@@ -82,6 +85,23 @@ an hour.
 
 See [the documentation](./ais_catcher/DOCS.md) for the options.
 
+### [AIS-catcher Receiver (Edge)](./ais_catcher_edge)
+
+The Receiver add-on built against AIS-catcher's rolling `Edge` build instead of
+a tagged release, which is the only way to get **managed mode** — AIS-catcher
+configuring itself from its own dashboard — until upstream tags a release that
+contains it. Managed mode is the default here.
+
+The trade is real: `Edge` is rebuilt from `main` and published to the same
+download URL, so every rebuild can install a different program, two people
+installing on different days do not get the same one, and an upstream mistake
+reaches you without anything changing in this repository. Install the stable
+Receiver unless you want managed mode; this add-on goes away once a tagged
+release has it.
+
+Everything but the pinned version and a handful of manifest lines is generated
+from the stable add-on by `tools/sync_edge.py`, so the two cannot drift.
+
 ### [AIS-catcher Statistics](./ais_catcher_stats)
 
 <img src="ais_catcher_stats/logo.png" width="320" alt="AIS-catcher Statistics">
@@ -128,6 +148,7 @@ ais_catcher/                 the receiver add-on
 ├── icon.png / logo.png      store artwork
 ├── DOCS.md                  the add-on documentation tab
 └── CHANGELOG.md
+ais_catcher_edge/            generated from ais_catcher/ by tools/sync_edge.py
 ais_catcher_stats/           the statistics add-on
 ├── config.yaml              manifest: options, schema, services: mqtt:want
 ├── build.yaml               base images per architecture
@@ -143,6 +164,7 @@ ais_catcher_stats/           the statistics add-on
 tests/test_bridge.py         offline test of normalisation and discovery
 tests/test_run_args.sh       offline test of the receiver's command line
 tools/make_icons.py          regenerates the artwork for both add-ons
+tools/sync_edge.py           regenerates ais_catcher_edge/ (--check in CI)
 .github/workflows/           add-on linter, shellcheck, nginx, both tests
 ```
 
@@ -175,6 +197,15 @@ To test a change on a real system, copy the add-on folder to `/addons/` on the
 Home Assistant host (Samba or SSH add-on), then **Add-on store → ⋮ → Check for
 updates**, and use **⋮ → Rebuild** on the add-on after each change. Keep
 `run.sh` LF-terminated — `.gitattributes` enforces this.
+
+The Edge add-on is generated. Change `ais_catcher/`, then:
+
+```bash
+python tools/sync_edge.py
+```
+
+CI fails if the two are out of step, and the script refuses to run — naming the
+rule to fix — when a change moves text it rewrites.
 
 To move the receiver to a newer AIS-catcher, change `AIS_CATCHER_VERSION` in
 `ais_catcher/build.yaml` to a tag that has

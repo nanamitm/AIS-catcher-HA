@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        addon: [ais_catcher, ais_catcher_stats]
+        addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats]
     steps:
       - uses: actions/checkout@v4
       - name: Check the add-on manifest
@@ -32,7 +32,19 @@ jobs:
         run: |
           shellcheck --shell=bash --exclude=SC1008,SC2155 \
             ais_catcher/run.sh \
+            ais_catcher_edge/run.sh \
             ais_catcher_stats/run.sh
+
+  edge:
+    name: Edge add-on is generated, not edited
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check ais_catcher_edge/ against tools/sync_edge.py
+        run: python tools/sync_edge.py --check
 
   nginx:
     name: Ingress proxy config (${{ matrix.addon }})
@@ -41,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        addon: [ais_catcher, ais_catcher_stats]
+        addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats]
     steps:
       - uses: actions/checkout@v4
       - name: Check nginx.conf
