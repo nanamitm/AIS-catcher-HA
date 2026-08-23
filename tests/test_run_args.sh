@@ -130,6 +130,10 @@ contains "ingress points at the managed dashboard" \
     "proxy_pass http://127.0.0.1:8098;" "$(cat "${WORK}/nginx/upstream.conf")"
 contains "root-relative dashboard APIs are made ingress-relative" \
     "sub_filter \"'/api/\" \"'api/\";" "$(cat "${WORK}/nginx/upstream.conf")"
+contains "long-lived dashboard assets are cache-busted" \
+    'sub_filter "?hash=" "?ingress=1&hash=";' "$(cat "${WORK}/nginx/upstream.conf")"
+contains "rewritten assets are not cached again" \
+    'add_header Cache-Control "no-store" always;' "$(cat "${WORK}/nginx/upstream.conf")"
 check "decompression is not mixed with response rewriting" \
     "" "$(grep 'gunzip on' "${WORK}/nginx/upstream.conf" || true)"
 contains "dashboard selection is logged" \

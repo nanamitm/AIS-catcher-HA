@@ -42,8 +42,14 @@ if [ "${MODE}" = "managed" ] &&
 proxy_pass http://127.0.0.1:8098;
 proxy_set_header Host \$http_host;
 proxy_set_header Accept-Encoding "";
+proxy_hide_header Cache-Control;
+add_header Cache-Control "no-store" always;
 sub_filter_once off;
 sub_filter_types application/javascript text/javascript;
+# Upstream gives its hashed JavaScript a one-year cache lifetime. The hash is
+# unchanged when only this ingress proxy changes, so browsers can otherwise
+# keep executing an older, unmodified copy after an add-on update.
+sub_filter "?hash=" "?ingress=1&hash=";
 sub_filter "'/api/" "'api/";
 sub_filter '\"/api/' '\"api/';
 sub_filter "'/viewer/" "'viewer/";

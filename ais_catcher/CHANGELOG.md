@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Cache-bust the dashboard's long-lived JavaScript URLs once and mark rewritten
+  ingress responses `no-store`. The upstream asset hash does not change when
+  only this proxy changes, so browsers upgrading from 0.1.1 or 0.1.2 could keep
+  running the cached script that still requested Home Assistant's `/api/status`.
+
 ## 0.1.3
 
 - Move gzip decompression into a separate internal nginx proxy stage. nginx's
