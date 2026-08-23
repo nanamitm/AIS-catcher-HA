@@ -1,5 +1,5 @@
 name: AIS-catcher Receiver
-version: "0.1.0"
+version: "0.1.1"
 slug: ais_catcher
 description: Run AIS-catcher itself on Home Assistant, with the SDR plugged into the host
 url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher
@@ -35,15 +35,16 @@ ports_description:
     api/stat.json here.
   8118/tcp: >-
     The dashboard in managed mode, which asks for a password of its own. It
-    cannot be reached through the sidebar panel; nothing listens here in
-    manual mode.
+    can also be selected for the sidebar; nothing listens here in manual mode.
 
 options:
   mode: manual
+  managed_sidebar: web_viewer
   log_level: info
   udp_targets: []
 schema:
   mode: list(managed|manual)
+  managed_sidebar: list(web_viewer|dashboard)
   log_level: list(debug|info|warning|error)
   # Everything below is read in manual mode only -- in managed mode the station
   # is configured from the dashboard and stored in /data/config.json.

@@ -75,6 +75,9 @@ newer than the AIS-catcher release this add-on installs, so it needs
 `AIS_CATCHER_VERSION` raised in `build.yaml` first; the add-on checks and says
 so rather than failing obscurely.
 
+In managed mode, `managed_sidebar` switches the Home Assistant sidebar between
+the standalone web viewer and the management dashboard.
+
 The web viewer is published on port 8100 for the rest of the network and for
 OpenCPN. The Statistics add-on does not need that port at all — it reaches the
 receiver by add-on name, `http://eb24ddf7-ais-catcher:8100`.

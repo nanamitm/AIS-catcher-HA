@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Add `managed_sidebar`, allowing managed mode's sidebar panel to show either
+  the web viewer (the default) or the management dashboard.
+- Rewrite the dashboard's root-relative API and viewer URLs at the ingress
+  proxy so its controls, login, event stream and embedded viewer remain under
+  Home Assistant's ingress path.
+
 ## 0.1.0
 
 First release. Runs AIS-catcher on Home Assistant itself, with the SDR plugged

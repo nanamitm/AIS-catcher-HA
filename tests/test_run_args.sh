@@ -112,7 +112,7 @@ D="${WORK}/data"
 
 echo "# managed mode, on an AIS-catcher that has it"
 AIS_CATCHER_HELP="	[-E [config file] [bind address:port] - managed mode]"
-run_case '{"mode":"managed","log_level":"info","udp_targets":[]}'
+run_case '{"mode":"managed","managed_sidebar":"web_viewer","log_level":"info","udp_targets":[]}'
 check "starts AIS-catcher" "AIS-catcher" "${CMD}"
 check "runs the dashboard and nothing else" \
     "-E ${D}/config.json 0.0.0.0:8118" "${ARGV}"
@@ -124,11 +124,21 @@ contains "the first start mentions the password" "set a password" "${LOG}"
 contains "and says where the dashboard is" "port 8118 of this host" "${LOG}"
 
 echo
+echo "# managed mode, with the dashboard in the sidebar"
+run_case '{"mode":"managed","managed_sidebar":"dashboard","log_level":"info","udp_targets":[]}'
+contains "ingress points at the managed dashboard" \
+    "proxy_pass http://127.0.0.1:8118;" "$(cat "${WORK}/nginx/upstream.conf")"
+contains "root-relative dashboard APIs are made ingress-relative" \
+    "sub_filter \"'/api/\" \"'api/\";" "$(cat "${WORK}/nginx/upstream.conf")"
+contains "dashboard selection is logged" \
+    "sidebar panel shows the management dashboard" "${LOG}"
+
+echo
 echo "# managed mode, on an AIS-catcher that does not"
 # v0.70 and older: -E is an obsolete alias for the NMEA2000 output, so asking
 # for managed mode there fails with a message about -I and nothing else.
 AIS_CATCHER_HELP="	[-I [interface] - push messages as NMEA2000 data]"
-run_case '{"mode":"managed","log_level":"info","udp_targets":[]}'
+run_case '{"mode":"managed","managed_sidebar":"web_viewer","log_level":"info","udp_targets":[]}'
 check "refuses to start it" "" "${ARGV}"
 contains "and says what to do instead" "does not have managed mode" "${LOG}"
 contains "naming the option to change" "Set mode to manual" "${LOG}"

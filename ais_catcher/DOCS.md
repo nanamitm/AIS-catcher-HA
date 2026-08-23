@@ -63,28 +63,24 @@ mode and the add-on stops with *"This AIS-catcher does not have managed
 mode"*, that is why. Raise `AIS_CATCHER_VERSION` in `build.yaml` and rebuild to
 use it.
 
-The dashboard is on **port 8118 of the Home Assistant host**, not in the
-sidebar, and asks you to set a password of its own the first time you open it.
-That is not a choice this add-on makes: the dashboard's page fetches
-`/api/status`, `/api/login` and the rest with a leading slash, and under the
-ingress path prefix the browser resolves those against Home Assistant rather
-than against the add-on — the requests never arrive, and the page shows
-*Connection Error*. Publishing it is how upstream intends it to be reached, and
-binding it anywhere other than localhost is what makes AIS-catcher require the
-password.
+The dashboard is published on **port 8118 of the Home Assistant host** and asks
+you to set a password of its own the first time you open it. It can also be
+shown in the sidebar by setting `managed_sidebar: dashboard`. The ingress proxy
+makes the dashboard's root-relative API and viewer URLs relative as it serves
+them, keeping login, controls, live logs and the embedded viewer inside the
+add-on's ingress path.
 
-The sidebar panel shows the **web viewer** managed mode brings up alongside the
-dashboard, on the control port plus one. That one is built with relative paths
-and proxies fine. So the two split cleanly: sidebar for the map, host port for
-the controls.
+With the default `managed_sidebar: web_viewer`, the sidebar instead shows the
+standalone web viewer managed mode brings up on the control port plus one.
 
 ## Options
 
-Only `mode` and `log_level` are read in managed mode.
+Only `mode`, `managed_sidebar` and `log_level` are read in managed mode.
 
 | Option | Default | Description |
 |---|---|---|
 | `mode` | `manual` | `manual` builds the command line from the options below; `managed` hands configuration to AIS-catcher's own dashboard on port 8118, which needs a newer AIS-catcher than this add-on installs. |
+| `managed_sidebar` | `web_viewer` | In managed mode, show either the standalone `web_viewer` or the management `dashboard` in the sidebar. Ignored in manual mode. |
 | `log_level` | `info` | `debug` prints every decoded message and statistics every 10s instead of every 60s. |
 
 Manual mode only:
@@ -161,7 +157,8 @@ is the Statistics add-on itself.
 
 Both add-ons put a panel in the sidebar, and they show different things:
 
-- **AIS Receiver** — the managed dashboard (in manual mode, the web viewer).
+- **AIS Receiver** — the selected managed-mode sidebar view (in manual mode,
+  always the web viewer).
 - **AIS-catcher** — the web viewer, with the vessel trackers and sensors the
   Statistics add-on builds from it.
 
@@ -222,10 +219,9 @@ has actually started.
 mode the viewer is on the control port plus one instead, so point the
 Statistics add-on at `:8119` or set the viewer to 8100 from the dashboard.
 
-**The dashboard shows "Connection Error" in the sidebar.** The sidebar panel is
-the web viewer, not the dashboard, and it stays empty until the receiver is
-running. The dashboard is on port 8118 of the host — it cannot work through
-ingress, see [Managed](#managed).
+**The dashboard shows "Connection Error" in the sidebar.** Confirm that
+`managed_sidebar` is `dashboard`, restart the add-on after saving the option,
+and check the add-on log for an ingress proxy warning.
 
 **The add-on stops with "This AIS-catcher does not have managed mode".** The
 pinned AIS-catcher release does not have it. Set `mode` back to `manual`, or

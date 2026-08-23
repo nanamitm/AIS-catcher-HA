@@ -8,12 +8,10 @@ set -e
 # two drift apart and leave the mapped port pointing at nothing.
 WEB_PORT=8100
 
-# Managed mode's dashboard, published to the host.  It cannot go through the
-# ingress panel: its frontend fetches /api/status, /api/login and the rest with
-# a leading slash, so under the ingress path prefix the browser sends them to
-# Home Assistant instead of here and nginx never sees them.  Published means
-# AIS-catcher requires a password of its own, which is how upstream intends it
-# to be reached anyway.
+# Managed mode's dashboard, published to the host and optionally shown through
+# ingress. Its frontend uses root-relative URLs, which the ingress setup below
+# rewrites to relative URLs when this is the selected sidebar view. Published
+# access still uses AIS-catcher's own password.
 DASHBOARD_PORT=8118
 
 # Managed mode also brings up a web viewer, on the control port plus one.  That
@@ -31,12 +29,32 @@ MODE="$(bashio::config 'mode')"
 
 # ---------------------------------------------------------------- ingress ----
 
-if [ "${MODE}" = "managed" ]; then
-    UPSTREAM_PORT="${MANAGED_VIEWER_PORT}"
+if [ "${MODE}" = "managed" ] &&
+   [ "$(bashio::config 'managed_sidebar')" = "dashboard" ]; then
+    UPSTREAM_PORT="${DASHBOARD_PORT}"
+    # The control frontend uses root-relative /api and /viewer URLs. Under HA
+    # ingress those escape the add-on's path prefix, so make them relative as
+    # the responses pass through nginx. Disable upstream compression so nginx
+    # can perform those substitutions in HTML and JavaScript.
+    cat > "${NGINX_CONF_DIR}/upstream.conf" <<EOF
+proxy_pass http://127.0.0.1:${UPSTREAM_PORT};
+proxy_set_header Host \$http_host;
+proxy_set_header Accept-Encoding "";
+sub_filter_once off;
+sub_filter_types application/javascript text/javascript;
+sub_filter "'/api/" "'api/";
+sub_filter '\"/api/' '\"api/';
+sub_filter "'/viewer/" "'viewer/";
+sub_filter '\"/viewer/' '\"viewer/';
+EOF
 else
-    UPSTREAM_PORT="${WEB_PORT}"
+    if [ "${MODE}" = "managed" ]; then
+        UPSTREAM_PORT="${MANAGED_VIEWER_PORT}"
+    else
+        UPSTREAM_PORT="${WEB_PORT}"
+    fi
+    echo "proxy_pass http://127.0.0.1:${UPSTREAM_PORT};" > "${NGINX_CONF_DIR}/upstream.conf"
 fi
-echo "proxy_pass http://127.0.0.1:${UPSTREAM_PORT};" > "${NGINX_CONF_DIR}/upstream.conf"
 
 # nginx workers drop to an unprivileged user, so its scratch space has to be
 # writable by them.
@@ -72,7 +90,11 @@ if [ "${MODE}" = "managed" ]; then
     if [ ! -f "${DATA_DIR}/config.json" ]; then
         bashio::log.info "First use: it asks you to set a password, then runs the setup wizard."
     fi
-    bashio::log.info "The sidebar panel shows the web viewer once the receiver runs."
+    if [ "$(bashio::config 'managed_sidebar')" = "dashboard" ]; then
+        bashio::log.info "The sidebar panel shows the management dashboard."
+    else
+        bashio::log.info "The sidebar panel shows the web viewer once the receiver runs."
+    fi
 
     # Supplying any other option puts AIS-catcher back into manual mode and the
     # dashboard is never started, so -E has to stand alone here.

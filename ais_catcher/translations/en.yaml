@@ -6,6 +6,11 @@ configuration:
       Managed hands configuration to AIS-catcher's own dashboard, on port 8118
       of this host, and ignores those options -- but needs a newer AIS-catcher
       than this add-on installs.
+  managed_sidebar:
+    name: Managed mode sidebar
+    description: >-
+      Choose whether the sidebar shows the web viewer or the management
+      dashboard. Managed mode only; manual mode always shows the web viewer.
   log_level:
     name: Log level
     description: >-

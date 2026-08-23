@@ -81,10 +81,8 @@ def config_yaml(text):
     )
     text = sub(
         text,
-        "    cannot be reached through the sidebar panel; nothing listens here in\n"
-        "    manual mode.\n",
-        "    cannot be reached through the sidebar panel; nothing listens here in\n"
-        "    manual mode.\n"
+        "    can also be selected for the sidebar; nothing listens here in manual mode.\n",
+        "    can also be selected for the sidebar; nothing listens here in manual mode.\n"
         "  8119/tcp: >-\n"
         "    The web viewer managed mode brings up beside the dashboard. Nothing\n"
         "    listens here in manual mode, which uses 8100.\n",
