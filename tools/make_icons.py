@@ -19,7 +19,14 @@ WHITE = (240, 249, 255)
 SEA = (16, 120, 150)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, os.pardir, "ais_catcher_stats")
+ROOT = os.path.join(HERE, os.pardir)
+
+# The mark is the same for every add-on in the repository -- they are the same
+# project -- so only the logo subtitle says which one this is.
+ADDONS = (
+    ("ais_catcher", "RECEIVER FOR HOME ASSISTANT"),
+    ("ais_catcher_stats", "STATISTICS FOR HOME ASSISTANT"),
+)
 
 
 def vertical_gradient(size, top, bottom):
@@ -110,7 +117,7 @@ def load_font(size):
     return ImageFont.load_default()
 
 
-def make_logo(path, size=(500, 200)):
+def make_logo(path, subtitle_text, size=(500, 200)):
     big = (size[0] * S, size[1] * S)
 
     # The store shows the logo on a light or a dark card, so the logo brings
@@ -140,7 +147,7 @@ def make_logo(path, size=(500, 200)):
                 return font
         return load_font(minimum)
 
-    title_text, subtitle_text = "AIS-catcher", "STATISTICS FOR HOME ASSISTANT"
+    title_text = "AIS-catcher"
     title = fit(title_text, int(big[1] * 0.26))
     subtitle = fit(subtitle_text, int(big[1] * 0.11))
     draw.text((tx, big[1] * 0.30), title_text, font=title, fill=WHITE)
@@ -152,5 +159,7 @@ def make_logo(path, size=(500, 200)):
 
 
 if __name__ == "__main__":
-    print("wrote", make_icon(os.path.join(OUT, "icon.png")))
-    print("wrote", make_logo(os.path.join(OUT, "logo.png")))
+    for slug, subtitle in ADDONS:
+        out = os.path.join(ROOT, slug)
+        print("wrote", make_icon(os.path.join(out, "icon.png")))
+        print("wrote", make_logo(os.path.join(out, "logo.png"), subtitle))

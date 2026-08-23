@@ -8,14 +8,18 @@ on:
 
 jobs:
   addon:
-    name: Add-on linter
+    name: Add-on linter (${{ matrix.addon }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: [ais_catcher, ais_catcher_stats]
     steps:
       - uses: actions/checkout@v4
       - name: Check the add-on manifest
         uses: frenck/action-addon-linter@v2
         with:
-          path: "./ais_catcher_stats"
+          path: "./${{ matrix.addon }}"
 
   shell:
     name: Shellcheck
@@ -25,19 +29,26 @@ jobs:
       - name: Check run.sh
         # SC1008: the bashio shebang is not a shell shellcheck knows about.
         # SC2155: "export X=$(...)" is the normal bashio idiom.
-        run: shellcheck --shell=bash --exclude=SC1008,SC2155 ais_catcher_stats/run.sh
+        run: |
+          shellcheck --shell=bash --exclude=SC1008,SC2155 \
+            ais_catcher/run.sh \
+            ais_catcher_stats/run.sh
 
   nginx:
-    name: Ingress proxy config
+    name: Ingress proxy config (${{ matrix.addon }})
     runs-on: ubuntu-latest
     container: nginx:alpine
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: [ais_catcher, ais_catcher_stats]
     steps:
       - uses: actions/checkout@v4
       - name: Check nginx.conf
         # upstream.conf is generated from the add-on options at start; a stand-in
         # is enough to prove the surrounding configuration parses.
         run: |
-          cp ais_catcher_stats/nginx.conf /etc/nginx/nginx.conf
-          echo 'proxy_pass http://127.0.0.1:8100/;' > /etc/nginx/upstream.conf
+          cp ${{ matrix.addon }}/nginx.conf /etc/nginx/nginx.conf
+          echo 'proxy_pass http://127.0.0.1:8100;' > /etc/nginx/upstream.conf
           mkdir -p /tmp/nginx_client_body /tmp/nginx_proxy
           nginx -t
