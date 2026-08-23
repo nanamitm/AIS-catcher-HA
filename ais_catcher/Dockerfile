@@ -21,9 +21,8 @@ ENV LANG=C.UTF-8
 # nothing in its log.  Failing the build says which library instead.
 RUN set -eux; \
     case "${BUILD_ARCH}" in \
-        amd64)       DEB_ARCH="amd64" ;; \
-        aarch64)     DEB_ARCH="arm64" ;; \
-        armv7|armhf) DEB_ARCH="armhf" ;; \
+        amd64)   DEB_ARCH="amd64" ;; \
+        aarch64) DEB_ARCH="arm64" ;; \
         *) echo "unsupported architecture: ${BUILD_ARCH}" >&2; exit 1 ;; \
     esac; \
     apt-get update; \

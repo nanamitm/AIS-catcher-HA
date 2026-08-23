@@ -11,7 +11,7 @@ alone if you only want a receiver with a map.
 
 ## Requirements
 
-- Home Assistant **OS** or **Supervised** on `aarch64`, `amd64` or `armv7`.
+- Home Assistant **OS** or **Supervised** on `aarch64` or `amd64`.
 - A supported SDR connected to the machine Home Assistant runs on: an RTL-SDR
   dongle, an AirSpy, a HackRF, a HydraSDR, or a serial receiver such as a
   dAISy. SDRplay is **not** supported — the release packages this add-on is

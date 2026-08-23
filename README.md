@@ -41,7 +41,7 @@ If the button does not work, add the repository by hand:
   Assistant Container.
 - For **Receiver**: a supported SDR connected to the Home Assistant machine —
   RTL-SDR, AirSpy, HackRF, HydraSDR, or a serial receiver such as a dAISy.
-  SDRplay is not supported. Architectures: `aarch64`, `amd64`, `armv7`.
+  SDRplay is not supported. Architectures: `aarch64` and `amd64`.
 - For **Statistics**: the
   [Mosquitto broker](https://github.com/home-assistant/addons/tree/master/mosquitto)
   add-on and the MQTT integration. The credentials are picked up from the
@@ -177,7 +177,7 @@ updates**, and use **⋮ → Rebuild** on the add-on after each change. Keep
 
 To move the receiver to a newer AIS-catcher, change `AIS_CATCHER_VERSION` in
 `ais_catcher/build.yaml` to a tag that has
-`ais-catcher_debian_bookworm_{amd64,arm64,armhf}.deb` among its
+`ais-catcher_debian_bookworm_{amd64,arm64}.deb` among its
 [release assets](https://github.com/jvde-github/AIS-catcher/releases), and
 rebuild.
 

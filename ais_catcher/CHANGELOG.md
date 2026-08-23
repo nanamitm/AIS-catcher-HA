@@ -23,5 +23,5 @@ somewhere else on the network.
   as it runs; an add-on should not opt its user into that by saying nothing.
 - The plots survive a restart: `/data/stat.bin` is backed up every 10 minutes
   and on shutdown.
-- Built from the upstream release package for `aarch64`, `amd64` and `armv7`,
-  so installing does not compile anything.
+- Built from the upstream release package for `aarch64` and `amd64`, so
+  installing does not compile anything.

@@ -6,10 +6,8 @@ url: https://github.com/nanamitm/AIS-catcher-HA/tree/main/ais_catcher
 arch:
   - aarch64
   - amd64
-  - armv7
 init: false
 startup: services
-boot: auto
 
 # The SDR is a USB device on the host: `usb` maps /dev/bus/usb into the add-on
 # and `udev` gives AIS-catcher the device metadata it needs to tell dongles
