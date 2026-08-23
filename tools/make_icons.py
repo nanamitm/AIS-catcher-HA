@@ -17,15 +17,19 @@ CYAN = (34, 211, 238)
 CYAN_DIM = (34, 211, 238, 150)
 WHITE = (240, 249, 255)
 SEA = (16, 120, 150)
+AMBER = (245, 158, 11)
+AMBER_SEA = (180, 90, 20)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, os.pardir)
 
-# The mark is the same for every add-on in the repository -- they are the same
-# project -- so only the logo subtitle says which one this is.
+# The mark (ship + radar waves) is the same for every add-on -- they are the
+# same project -- but the Receiver talks to hardware plugged into the Home
+# Assistant machine, so it gets a warm accent instead of the Statistics
+# bridge's cyan to tell the two apart at a glance.
 ADDONS = (
-    ("ais_catcher", "RECEIVER FOR HOME ASSISTANT"),
-    ("ais_catcher_stats", "STATISTICS FOR HOME ASSISTANT"),
+    ("ais_catcher", "RECEIVER FOR HOME ASSISTANT", AMBER, AMBER_SEA),
+    ("ais_catcher_stats", "STATISTICS FOR HOME ASSISTANT", CYAN, SEA),
 )
 
 
@@ -46,7 +50,7 @@ def rounded_mask(size, radius):
     return mask
 
 
-def draw_mark(draw, cx, cy, r):
+def draw_mark(draw, cx, cy, r, accent=CYAN, wave=SEA):
     """Radar waves over a ship silhouette, centred on (cx, cy) within radius r."""
     # three signal arcs radiating from the mast head
     top = cy - r * 0.62
@@ -54,7 +58,7 @@ def draw_mark(draw, cx, cy, r):
         rr = r * scale
         box = [cx - rr, top - rr * 0.78, cx + rr, top + rr * 0.78]
         width = max(1, int(r * 0.085))
-        colour = CYAN if i == 0 else (*CYAN, 235 - i * 55)
+        colour = accent if i == 0 else (*accent, 235 - i * 55)
         draw.arc(box, start=205, end=335, fill=colour, width=width)
 
     # mast
@@ -86,21 +90,21 @@ def draw_mark(draw, cx, cy, r):
         x0 = cx - r + i * step
         box = [x0, wave_y - amp, x0 + step, wave_y + amp]
         start, end = (0, 180) if i % 2 else (180, 360)
-        draw.arc(box, start=start, end=end, fill=SEA, width=width)
+        draw.arc(box, start=start, end=end, fill=wave, width=width)
 
 
-def make_icon(path, size=128):
+def make_icon(path, size=128, accent=CYAN, wave=SEA):
     big = size * S
     background = vertical_gradient((big, big), NAVY_TOP, NAVY_BOTTOM).convert("RGBA")
 
     glow = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     ImageDraw.Draw(glow).ellipse([big * 0.12, big * 0.02, big * 0.88, big * 0.72],
-                                 fill=(34, 211, 238, 46))
+                                 fill=(*accent, 46))
     background = Image.alpha_composite(background, glow.filter(
         ImageFilter.GaussianBlur(big * 0.06)))
 
     layer = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    draw_mark(ImageDraw.Draw(layer), big / 2, big * 0.52, big * 0.33)
+    draw_mark(ImageDraw.Draw(layer), big / 2, big * 0.52, big * 0.33, accent, wave)
     image = Image.alpha_composite(background, layer)
 
     image.putalpha(rounded_mask((big, big), int(big * 0.22)))
@@ -117,7 +121,7 @@ def load_font(size):
     return ImageFont.load_default()
 
 
-def make_logo(path, subtitle_text, size=(500, 200)):
+def make_logo(path, subtitle_text, size=(500, 200), accent=CYAN, wave=SEA):
     big = (size[0] * S, size[1] * S)
 
     # The store shows the logo on a light or a dark card, so the logo brings
@@ -126,13 +130,13 @@ def make_logo(path, subtitle_text, size=(500, 200)):
     glow = Image.new("RGBA", big, (0, 0, 0, 0))
     ImageDraw.Draw(glow).ellipse([-big[1] * 0.2, -big[1] * 0.5,
                                   big[1] * 1.1, big[1] * 0.9],
-                                 fill=(34, 211, 238, 40))
+                                 fill=(*accent, 40))
     image = Image.alpha_composite(image, glow.filter(
         ImageFilter.GaussianBlur(big[1] * 0.12)))
 
     mark = Image.new("RGBA", big, (0, 0, 0, 0))
     mark_cx, mark_r = big[1] * 0.52, big[1] * 0.32
-    draw_mark(ImageDraw.Draw(mark), mark_cx, big[1] * 0.50, mark_r)
+    draw_mark(ImageDraw.Draw(mark), mark_cx, big[1] * 0.50, mark_r, accent, wave)
     image = Image.alpha_composite(image, mark)
 
     draw = ImageDraw.Draw(image)
@@ -151,7 +155,7 @@ def make_logo(path, subtitle_text, size=(500, 200)):
     title = fit(title_text, int(big[1] * 0.26))
     subtitle = fit(subtitle_text, int(big[1] * 0.11))
     draw.text((tx, big[1] * 0.30), title_text, font=title, fill=WHITE)
-    draw.text((tx + 2, big[1] * 0.58), subtitle_text, font=subtitle, fill=CYAN)
+    draw.text((tx + 2, big[1] * 0.58), subtitle_text, font=subtitle, fill=accent)
 
     image.putalpha(rounded_mask(big, int(big[1] * 0.10)))
     image.resize(size, Image.LANCZOS).save(path)
@@ -159,7 +163,7 @@ def make_logo(path, subtitle_text, size=(500, 200)):
 
 
 if __name__ == "__main__":
-    for slug, subtitle in ADDONS:
+    for slug, subtitle, accent, wave in ADDONS:
         out = os.path.join(ROOT, slug)
-        print("wrote", make_icon(os.path.join(out, "icon.png")))
-        print("wrote", make_logo(os.path.join(out, "logo.png"), subtitle))
+        print("wrote", make_icon(os.path.join(out, "icon.png"), accent=accent, wave=wave))
+        print("wrote", make_logo(os.path.join(out, "logo.png"), subtitle, accent=accent, wave=wave))
