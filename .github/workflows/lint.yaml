@@ -15,7 +15,7 @@ jobs:
       matrix:
         addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats, ais_catcher_control]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check the add-on manifest
         uses: frenck/action-addon-linter@v2
         with:
@@ -25,7 +25,7 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check run.sh
         # SC1008: the bashio shebang is not a shell shellcheck knows about.
         # SC2155: "export X=$(...)" is the normal bashio idiom.
@@ -40,8 +40,8 @@ jobs:
     name: Edge add-on is generated, not edited
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Check ais_catcher_edge/ against tools/sync_edge.py
@@ -56,7 +56,7 @@ jobs:
       matrix:
         addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats, ais_catcher_control]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check nginx.conf
         # upstream.conf is generated from the add-on options at start; a stand-in
         # is enough to prove the surrounding configuration parses.

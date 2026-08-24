@@ -11,8 +11,8 @@ jobs:
     name: Bridge unit test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install test dependencies
@@ -24,7 +24,7 @@ jobs:
     name: Receiver command line test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run the command line test
         run: |
           bash tests/test_run_args.sh

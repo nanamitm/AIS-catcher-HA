@@ -12,6 +12,7 @@ RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)
     if [ -n "${RESOLVER}" ]; then
         echo "resolver ${RESOLVER} valid=30s;"
         echo "set \$control_upstream \"${CONTROL_URL}\";"
+        # shellcheck disable=SC2016  # nginx variables, not shell variables
         echo 'proxy_pass $control_upstream$request_uri;'
     else
         echo "proxy_pass ${CONTROL_URL}/;"
