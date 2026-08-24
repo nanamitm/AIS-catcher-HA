@@ -2,12 +2,14 @@
 
 Home Assistant add-on repository for [AIS-catcher](https://github.com/jvde-github/AIS-catcher).
 
-Two add-ons that work together, or on their own:
+Four add-ons that work together, or on their own:
 
 - **AIS-catcher Receiver** runs AIS-catcher on the Home Assistant machine
   itself, with the SDR plugged into it.
 - **AIS-catcher Statistics** turns any running AIS-catcher — the add-on above,
   or a receiver elsewhere on the network — into Home Assistant entities.
+- **AIS-catcher Control Panel** puts AIS-catcher-control from another machine
+  in the Home Assistant sidebar, without exposing it to the internet.
 - **AIS-catcher Receiver (Edge)** is the same receiver built against
   AIS-catcher's rolling `Edge` build, for the managed mode that no tagged
   release contains yet.
@@ -141,6 +143,19 @@ problem.
 
 See [the documentation](./ais_catcher_stats/DOCS.md) for the options.
 
+### [AIS-catcher Control Panel](./ais_catcher_control)
+
+Proxies an AIS-catcher-control installation running on another Linux machine,
+normally at port 8110, into the Home Assistant sidebar. Its login, configuration,
+service controls, logs and system actions remain available behind Home Assistant
+ingress. The remote control password is still required.
+
+This is intentionally separate from Statistics: use Control Panel for managing
+the receiver and Statistics for Home Assistant sensors and vessel trackers.
+
+See [the documentation](./ais_catcher_control/DOCS.md) for setup and security
+notes.
+
 ## Repository layout
 
 ```
@@ -167,6 +182,16 @@ ais_catcher_stats/           the statistics add-on
 ├── translations/en.yaml     option labels shown in the add-on UI
 ├── icon.png / logo.png      store artwork
 ├── DOCS.md                  the add-on documentation tab
+└── CHANGELOG.md
+ais_catcher_control/         remote AIS-catcher-control ingress panel
+├── config.yaml              manifest and remote control URL
+├── build.yaml               base images per architecture
+├── Dockerfile
+├── run.sh                   validates options and generates the proxy target
+├── nginx.conf               ingress path, redirect, cookie and SSE proxying
+├── translations/en.yaml
+├── icon.png / logo.png
+├── DOCS.md
 └── CHANGELOG.md
 tests/test_bridge.py         offline test of normalisation and discovery
 tests/test_run_args.sh       offline test of the receiver's command line

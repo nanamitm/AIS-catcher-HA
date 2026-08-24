@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats]
+        addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats, ais_catcher_control]
     steps:
       - uses: actions/checkout@v4
       - name: Check the add-on manifest
@@ -33,7 +33,8 @@ jobs:
           shellcheck --shell=bash --exclude=SC1008,SC2155 \
             ais_catcher/run.sh \
             ais_catcher_edge/run.sh \
-            ais_catcher_stats/run.sh
+            ais_catcher_stats/run.sh \
+            ais_catcher_control/run.sh
 
   edge:
     name: Edge add-on is generated, not edited
@@ -53,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats]
+        addon: [ais_catcher, ais_catcher_edge, ais_catcher_stats, ais_catcher_control]
     steps:
       - uses: actions/checkout@v4
       - name: Check nginx.conf

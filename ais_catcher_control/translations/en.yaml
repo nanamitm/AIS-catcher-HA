@@ -1,0 +1,7 @@
+configuration:
+  url:
+    name: AIS-catcher-control URL
+    description: Address of AIS-catcher-control on the remote receiver, normally port 8110.
+  verify_ssl:
+    name: Verify SSL certificate
+    description: Verify the remote HTTPS certificate. Disable only for a trusted self-signed receiver.
